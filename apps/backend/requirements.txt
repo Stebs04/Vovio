@@ -1,0 +1,16 @@
+#Motore di trascrizione basato su transformers
+faster-whisper
+
+#Framework per l'orchestrazione di agenti intelligenti
+agno
+
+# Framework web per gestire le richieste API e server ASGI.
+fastapi
+uvicorn
+
+# Manipolazione di file video e audio (estrazione tracce).
+moviepy
+
+# Sintesi vocale per la generazione del doppiaggio
+coqui-tts
+

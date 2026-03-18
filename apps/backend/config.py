@@ -6,3 +6,7 @@ BASE_DIR = Path(__file__).resolve().parent
 
 #Creazione del percorso temporaneo per il processamento dei flussi multimediali
 TEMP_DIR = BASE_DIR / "temp"
+
+#Validazione ed eventuale creazione della directory temporanea
+TEMP_DIR.mkdir(parents=True, exist_ok=True)
+

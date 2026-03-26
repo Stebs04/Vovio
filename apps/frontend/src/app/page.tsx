@@ -1,65 +1,168 @@
-import Image from "next/image";
+"use client";
+import {useState} from 'react';
+import { useVovioPipeline } from "@/hooks/useVovioPipeline";
 
-export default function Home() {
-  return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+/**
+ * @file page.tsx
+ * @description Entry point della User Interface (UI) di Vovio.
+ * Implementa l'architettura View-Model delegando la logica di business e di stato
+ * al custom hook `useVovioPipeline`. Gestisce il layout principale e l'orchestrazione
+ * dei flussi di trascrizione, traduzione e sintesi vocale multi-agente.
+ * * @module VovioMainPage
+ * @requires useVovioPipeline
+ */
+
+
+/**
+ * Componente principale della pagina.
+ * Inizializza la State Machine tramite `useVovioPipeline` e renderizza
+ * il layout a griglia contenente i controlli e i visualizzatori di stato.
+ * * @returns {JSX.Element} Il nodo radice dell'interfaccia utente.
+ */
+
+export default function VovioMainPage(){
+
+  /**
+   * Stato locale per la memorizzazione del file video selezionato dall'utente.
+   * Tipizzato rigorosamente come `File | null` per gestire esplicitamente l'assenza di selezione.
+   * Questo file verrà passato alla pipeline architetturale al momento dell'avvio.
+   */
+
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+
+  /**
+   * Stato locale per la lingua di destinazione del doppiaggio.
+   * Inizializzato a 'en' (Inglese) come default. Verrà passato agli agenti di
+   * traduzione e sintesi per configurare l'output del modello AI.
+   */
+
+  const [targetLanguage, setTargetLanguage] = useState<string>("en");
+
+  const {state, startTranscription, startTranslation, startDubbing} = useVovioPipeline();
+
+  return(
+    <main className="min-h-screen bg-gray-50 p-8">
+
+      <div className="max-w-4xl mx-auto flex flex-col gap-8">
+        {/** Sezione Header: Titolo e descrizione del cruscotto. Utilizza Flexbox per la spaziatura verticale coerente.*/}
+        <header className="flex flex-col gap-2">
+
+          <h1 className="text-4xl font-extrabold tracking-tight text-gray-900">Vovio Control Center</h1>
+
+          <p className="text-gray-500">Pannello di orchestrazione per la pipeline di doppiaggio Multi-Agente</p>
+
+        </header>
+        {/* Card Principale: Contiene i controlli interattivi (Upload, Pulsanti API).
+         Implementa un design pulito con padding abbondante e shadow leggera.*/}
+
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 flex flex-col gap-6">
+          <h2 className="text-xl font-bold text-gray-800">Caricamento Video e Controlli</h2>
+
+          {/* Selettore File: Limitato nativamente ai formati video tramite l'attributo accept.
+          Lo stile del pulsante nativo è sovrascritto tramite i modificatori `file:` di Tailwind. */}
+          <input type="file" accept="video/*" className="block w-full text-sm 
+          text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:font-semibold 
+          file:bg-gray-900 file:text-white hover:file:bg-gray-700 cursor-pointer" 
+          onChange={(e) => setSelectedFile(e.target.files?.[0] || null)}/>
+          
+          <div className='flex gap-4 mt-2'>
+            
+            {/* Selettore Lingua: Componente controllato React.
+            Il valore è bidirezionalmente legato allo stato `targetLanguage`.*/}
+            <div className="flex items-center gap-3 mt-4">
+
+              <label htmlFor='languageSelect' className='text-sm font-medium text-gray-700'>
+                Lingua di destinazione:
+              </label>
+
+              <select 
+                id="languageSelect"
+                value={targetLanguage}
+                onChange={(e) => setTargetLanguage(e.target.value)}
+                className='border border-gray-200 rounded-lg px-3 py-1.5 
+                text-sm focus:ring-2 focus:ring-purple-500 outline-none bg-white'
+              >
+                <option value="en">Inglese (EN)</option>
+
+                <option value="es">Spagnolo (ES)</option>
+
+                <option value="fr">Francese (FR)</option>
+
+                <option value="de">Tedesco (DE)</option>
+
+              </select>
+
+            </div>
+
+          </div>
+
+          {/* Pulsantiera di Orchestrazione: 
+          I pulsanti sono vincolati alla presenza del file tramite l'attributo disabled 
+          e protetti da guard clauses nell'onClick per prevenire chiamate API vuote. */}
+          <div className='flex gap-4 mt-2'>
+
+            <button className='px-4 py-2 bg-blue-600 text-white font-semibold rounded-lg 
+              hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed'
+              onClick={
+                ()=> selectedFile && startTranscription(selectedFile)}
+                disabled={!selectedFile}>
+                  Avvia Trascrizione
+            </button>
+
+            <button className="px-4 py-2 bg-purple-600 text-white font-semibold rounded-lg hover:bg-purple-700 
+            disabled:opacity-50 disabled:cursor-not-allowed" 
+            onClick={() => startTranslation(targetLanguage)} 
+            disabled={!state.transcription}>
+              Avvia Traduzione
+              </button>
+
+              <button className="px-4 py-2 bg-emerald-600 text-white font-semibold rounded-lg hover:bg-emerald-700 
+              disabled:opacity-50 disabled:cursor-not-allowed" 
+              onClick={() => startDubbing(targetLanguage)} 
+              disabled={!state.translation}>
+                Genera Doppiaggio
+              </button>
+
+          </div>
+
+          
+        {/** Fine della prima card */}
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
-    </div>
+
+          {/* * Risultato Trascrizione: 
+            * Renderizzato condizionalmente tramite operatore logico AND (&&).
+            * Il componente viene montato nel DOM solo quando l'agente Whisper popola lo stato.
+          */}
+
+          {state.transcription && (
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 flex flex-col gap-4">
+
+            <h3 className="text-lg font-bold text-gray-800">Trascrizione Originale</h3>
+
+            {/* Contenitore Read-Only: 
+            Sfrutta `whitespace-pre-wrap` per preservare le interruzioni di riga (\n) 
+            generate nativamente dal modello Whisper, garantendo la leggibilità. 
+            */}
+            <div className='p-4 bg-gray-50 rounded-xl border border-gray-100'>
+
+              <p className='text-gray-700 whitespace-pre-wrap text-sm leading-relaxed'>
+                
+                {state.transcription}
+
+                </p> 
+
+            </div>
+
+          </div>)}
+
+            {/* * Risultato Traduzione: 
+            * Renderizzato condizionalmente (operatore &&) dipendente dallo stato `translation`.
+            * Isolato in una Card dedicata per mantenere la modularità della UI.
+            */}
+
+      {/** Fine del div contenitore */}
+      </div>
+
+    </main>
   );
 }

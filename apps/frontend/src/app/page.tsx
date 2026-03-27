@@ -108,10 +108,7 @@ export default function VovioMainPage(){
 
           {/* Selettore File: Limitato nativamente ai formati video tramite l'attributo accept.
           Lo stile del pulsante nativo è sovrascritto tramite i modificatori `file:` di Tailwind. */}
-          <input type="file" accept="video/*" className="block w-full text-sm 
-          text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:font-semibold 
-          file:bg-gray-900 file:text-white hover:file:bg-gray-700 cursor-pointer" 
-          onChange={(e) => setSelectedFile(e.target.files?.[0] || null)}/>
+          <input type="file" accept="video/*" className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:font-semibold file:bg-gray-900 file:text-white hover:file:bg-gray-700 cursor-pointer" onChange={(e) => setSelectedFile(e.target.files?.[0] || null)}/>
           
           <div className='flex gap-4 mt-2'>
             
@@ -123,13 +120,7 @@ export default function VovioMainPage(){
                 Lingua di destinazione:
               </label>
 
-              <select 
-                id="languageSelect"
-                value={targetLanguage}
-                onChange={(e) => setTargetLanguage(e.target.value)}
-                className='border border-gray-200 rounded-lg px-3 py-1.5 
-                text-sm focus:ring-2 focus:ring-purple-500 outline-none bg-white'
-              >
+              <select id="languageSelect" value={targetLanguage} onChange={(e) => setTargetLanguage(e.target.value)} className='border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-purple-500 outline-none bg-white'>
                 <option value="en">Inglese (EN)</option>
 
                 <option value="es">Spagnolo (ES)</option>
@@ -149,25 +140,15 @@ export default function VovioMainPage(){
           e protetti da guard clauses nell'onClick per prevenire chiamate API vuote. */}
           <div className='flex gap-4 mt-2'>
 
-            <button className='px-4 py-2 bg-blue-600 text-white font-semibold rounded-lg 
-              hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed'
-              onClick={
-                ()=> selectedFile && startTranscription(selectedFile)}
-                disabled={!selectedFile}>
+            <button className='px-4 py-2 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed' onClick={()=> selectedFile && startTranscription(selectedFile)} disabled={!selectedFile}>
                   Avvia Trascrizione
             </button>
 
-            <button className="px-4 py-2 bg-purple-600 text-white font-semibold rounded-lg hover:bg-purple-700 
-            disabled:opacity-50 disabled:cursor-not-allowed" 
-            onClick={() => startTranslation(targetLanguage)} 
-            disabled={!state.transcription}>
+            <button className="px-4 py-2 bg-purple-600 text-white font-semibold rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed" onClick={() => startTranslation(targetLanguage)} disabled={!state.transcription}>
               Avvia Traduzione
               </button>
 
-              <button className="px-4 py-2 bg-emerald-600 text-white font-semibold rounded-lg hover:bg-emerald-700 
-              disabled:opacity-50 disabled:cursor-not-allowed" 
-              onClick={() => startDubbing(targetLanguage)} 
-              disabled={!state.translation}>
+              <button className="px-4 py-2 bg-emerald-600 text-white font-semibold rounded-lg hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed" onClick={() => startDubbing(targetLanguage)} disabled={!state.translation}>
                 Genera Doppiaggio
               </button>
 
@@ -205,9 +186,7 @@ export default function VovioMainPage(){
                 Trigger per l'esportazione Client-Side. 
                 Utilizza fallback su stringa vuota (|| "") per conformità rigorosa ai tipi TypeScript.
             */}
-            <button onClick={() => downloadTextFile(state.transcription || "","trascrizione.txt")} 
-              className='mt-2 self-start px-4 py-2 bg-white border border-gray-300 text-sm font-medium text-gray-700
-              rounded-lg hover:bg-gray-50 transition-colors'>
+            <button onClick={() => downloadTextFile(state.transcription || "","trascrizione.txt")} className='mt-2 self-start px-4 py-2 bg-white border border-gray-300 text-sm font-medium text-gray-700 rounded-lg hover:bg-gray-50 transition-colors'>
                 Scarica Trascrizione
               </button>
 
@@ -239,9 +218,7 @@ export default function VovioMainPage(){
                 Riutilizza la helper function per scaricare il testo tradotto generato
                 dal TranslationAgent. Design omogeneo al bottone di trascrizione.
               */}
-              <button onClick={() => downloadTextFile(state.translation || "","traduzione.txt")} 
-                className='mt-2 self-start px-4 py-2 bg-white border border-gray-300 text-sm font-medium text-gray-700
-                rounded-lg hover:bg-gray-50 transition-colors'>
+              <button onClick={() => downloadTextFile(state.translation || "","traduzione.txt")} className='mt-2 self-start px-4 py-2 bg-white border border-gray-300 text-sm font-medium text-gray-700 rounded-lg hover:bg-gray-50 transition-colors'>
                   Scarica Traduzione
               </button>
 
@@ -267,8 +244,7 @@ export default function VovioMainPage(){
               Sfrutta il tag HTML5 <a> con attributo `download` per invocare il manager di sistema.
               Stilizzato come bottone full-width per massimizzare la Call-To-Action (CTA) finale. 
               */}
-              <a href={state.finalVideoUrl} download={true} className='mt-4 flex justify-center items-center w-full py-3
-              bg-gray-900 text-white font-semibold rounded-xl hover:bg-gray-800 transition-colors'>
+              <a href={state.finalVideoUrl} download={true} className='mt-4 flex justify-center items-center w-full py-3 bg-gray-900 text-white font-semibold rounded-xl hover:bg-gray-800 transition-colors'>
                 Scarica Video Finale
               </a>
 

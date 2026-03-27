@@ -1,6 +1,7 @@
 from TTS.api import TTS
 from pathlib import Path
 from config import TEMP_DIR
+import os
 
 class SynthesizerAgent:
     """
@@ -16,8 +17,10 @@ class SynthesizerAgent:
             model_name (str): Il nome del modello TTS da caricare (default: XTTS v2).
                               XTTS è scelto per le sue capacità di clonazione vocale zero-shot.
         """
-        # Carica il modello TTS specificato.
-        # gpu=False per default per compatibilità, ma andrebbe settato a True in produzione se disponibile CUDA.
+        os.environ["COQUI_TOS_AGREED"] = "1"
+        #Inizializzazione Motore TTS:
+        # Si abilita `agree_to_terms=True` per accettare la licenza CPML in modo programmatico,
+        # evitando blocchi interattivi del server. gpu=False garantisce la stabilità su CPU.
         self.tts = TTS(model_name=model_name, progress_bar=False, gpu=False)
     
     def generate_audio(self, text: str, target_language: str, reference_audio_path: str) -> str:

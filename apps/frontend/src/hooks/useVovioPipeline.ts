@@ -58,9 +58,9 @@ export const useVovioPipeline = () => {
      * Avvia il processo asincrono di trascrizione.
      * Cambia lo stato per indicare il caricamento e chiama il Service Layer API.
      */
-    const startTranscription = async () => {
+    const startTranscription = async (file:File) => {
         // VALIDAZIONE: Verifica preliminare per assicurarsi che un file sia stato caricato
-        if (!state.videoFile) {
+        if (!file) {
             // Se nessun file è presente, imposta un errore nello stato e interrompe
             setState({
                 ...state,
@@ -72,6 +72,7 @@ export const useVovioPipeline = () => {
         // SETUP: Aggiorna lo stato per indicare l'inizio della trascrizione (loading spinner)
         setState({
             ...state,
+            videoFile:file,
             currentStep: 'TRANSCRIBING',
             error: null // Azzera eventuali errori precedenti
         })
@@ -79,7 +80,7 @@ export const useVovioPipeline = () => {
         // ESECUZIONE: Avvia la pipeline e gestisce la Graceful Degradation in caso di fault di rete
         try {
             // Esegue la chiamata all'API di trascrizione passando il file video
-            const response = await transcribeVideo(state.videoFile);
+            const response = await transcribeVideo(file);
             
             // SUCCESSO: Aggiorna lo stato con la trascrizione ricevuta dal backend
             setState({

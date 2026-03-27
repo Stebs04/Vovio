@@ -1,11 +1,21 @@
+# Dipendenze Python (Ambienti virtuali)
+venv/
 .venv/
-
+env/
 __pycache__/
+*.py[cod]
 
-*.mp4
-*.wav
-*.srt
+# Dipendenze JavaScript
+node_modules/
+.next/
+out/
+build/
 
+# File di sistema e chiavi segrete
 .env
+.DS_Store
 
-.vscode/
+# File temporanei di elaborazione (Dati effimeri)
+apps/backend/temp/
+*.wav
+*.mp4

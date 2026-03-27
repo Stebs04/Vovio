@@ -1,16 +1,19 @@
-#Motore di trascrizione basato su transformers
-faster-whisper
-
-#Framework per l'orchestrazione di agenti intelligenti
-agno
-
-# Framework web per gestire le richieste API e server ASGI.
+# Core Web Framework
 fastapi
 uvicorn
+python-multipart
+python-dotenv
 
-# Manipolazione di file video e audio (estrazione tracce).
+# AI Foundation (The "Brain")
+torch
+torchaudio
+transformers==4.44.2
+
+# Multi-Agent AI Engines
+faster-whisper
+agno
+openai
+
+# Multimedia Processing
 moviepy
-
-# Sintesi vocale per la generazione del doppiaggio
 coqui-tts
-

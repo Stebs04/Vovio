@@ -40,6 +40,25 @@ export default function VovioMainPage(){
 
   const {state, startTranscription, startTranslation, startDubbing} = useVovioPipeline();
 
+  /**
+   * Helper function per l'esportazione Client-Side dei testi.
+   * Genera un Blob in memoria a partire da una stringa e simula il click
+   * su un anchor tag invisibile per attivare il download manager nativo.
+   * Ottimizza l'architettura evitando chiamate di rete ridondanti al backend.
+   * * @param {string} text - Il contenuto testuale da salvare.
+   * @param {string} filename - Il nome del file da proporre all'utente.
+   */
+
+  const downloadTextFile= (text: string, filename:string) =>{
+    const blob = new Blob([text], {type: "text/plain;charset=utf-8"})
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    link.click();
+    URL.revokeObjectURL(url);
+  }
+
   return(
     <main className="min-h-screen bg-gray-50 p-8">
 
@@ -52,6 +71,28 @@ export default function VovioMainPage(){
           <p className="text-gray-500">Pannello di orchestrazione per la pipeline di doppiaggio Multi-Agente</p>
 
         </header>
+
+        {/* Banner di Feedback Sistema: 
+          Visibile solo durante l'elaborazione attiva (Stati diversi da IDLE).
+          Sfrutta l'animazione `animate-pulse` per fornire un feedback visivo immediato
+          di caricamento asincrono senza appesantire il DOM.
+          */}
+        {state.currentStep !== 'IDLE' && state.currentStep !== 'ERROR' && (
+
+          <div className='p-4 rounded-xl bg-blue-50 border border-blue-200 text-blue-700 text-sm font-medium animate-pulse'>
+            {state.currentStep}
+          </div>
+
+        )}
+
+        {state.currentStep === 'ERROR' &&(
+
+          <div className="p-4 rounded-xl bg-red-50 border border-red-200 text-red-700 text-sm font-medium">
+            {state.error}
+          </div>
+
+        )}
+
         {/* Card Principale: Contiene i controlli interattivi (Upload, Pulsanti API).
          Implementa un design pulito con padding abbondante e shadow leggera.*/}
 
@@ -153,12 +194,80 @@ export default function VovioMainPage(){
 
             </div>
 
+            {/* Azione Contestuale: 
+                Trigger per l'esportazione Client-Side. 
+                Utilizza fallback su stringa vuota (|| "") per conformità rigorosa ai tipi TypeScript.
+            */}
+            <button onClick={() => downloadTextFile(state.transcription || "","trascrizione.txt")} 
+              className='mt-2 self-start px-4 py-2 bg-white border border-gray-300 text-sm font-medium text-gray-700
+              rounded-lg hover:bg-gray-50 transition-colors'>
+                Scarica Trascrizione
+              </button>
+
           </div>)}
 
-            {/* * Risultato Traduzione: 
+          {/* * Risultato Traduzione: 
             * Renderizzato condizionalmente (operatore &&) dipendente dallo stato `translation`.
             * Isolato in una Card dedicata per mantenere la modularità della UI.
+          */}
+          {state.translation && (
+
+            <div className='bg-white rounded-2xl shadow-sm border border-gray-100 p-6 flex flex-col gap-4'>
+              
+              <h3 className='text-lg font-bold text-gray-800'>Traduzione Generata</h3>
+              {/* Contenitore Read-Only Traduzione: 
+                Replica lo stile della trascrizione per coerenza visiva (Design System).
+                Inietta la variabile `state.translation` popolata dal TranslationAgent.*/}
+              <div className='p-4 bg-gray-50 rounded-xl border border-gray-100'>
+
+                <p className='text-gray-700 whitespace-pre-wrap text-sm leading-relaxed'>
+
+                  {state.translation}
+
+                </p>
+
+              </div>
+              
+              {/* Azione Contestuale Traduzione: 
+                Riutilizza la helper function per scaricare il testo tradotto generato
+                dal TranslationAgent. Design omogeneo al bottone di trascrizione.
+              */}
+              <button onClick={() => downloadTextFile(state.translation || "","traduzione.txt")} 
+                className='mt-2 self-start px-4 py-2 bg-white border border-gray-300 text-sm font-medium text-gray-700
+                rounded-lg hover:bg-gray-50 transition-colors'>
+                  Scarica Traduzione
+              </button>
+
+            </div>
+
+          )} 
+
+          {/* * Risultato Doppiaggio (Player Video): 
+            * Renderizzato solo al completamento dell'intera pipeline.
+            * Sfrutta il tag nativo HTML5 <video> per il playback con controlli integrati.
             */}
+          {state.finalVideoUrl && (
+
+            <div className='bg-white rounded-2xl shadow-sm border border-gray-100 p-6 flex flex-col gap-4'>
+              
+              <h3 className='text-lg font-bold text-gray-800'>Video Doppiato</h3>
+
+              <video controls={true} className='w-full rounded-xl border border-gray-100 bg-black '
+                src={state.finalVideoUrl}
+              />
+
+              {/* Azione di Download Video: 
+              Sfrutta il tag HTML5 <a> con attributo `download` per invocare il manager di sistema.
+              Stilizzato come bottone full-width per massimizzare la Call-To-Action (CTA) finale. 
+              */}
+              <a href={state.finalVideoUrl} download={true} className='mt-4 flex justify-center items-center w-full py-3
+              bg-gray-900 text-white font-semibold rounded-xl hover:bg-gray-800 transition-colors'>
+                Scarica Video Finale
+              </a>
+
+            </div>
+
+          )}
 
       {/** Fine del div contenitore */}
       </div>

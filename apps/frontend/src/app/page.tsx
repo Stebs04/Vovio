@@ -1,6 +1,7 @@
 "use client";
 import {useState} from 'react';
 import { useVovioPipeline } from "@/hooks/useVovioPipeline";
+import Image from 'next/image';
 
 /**
  * @file page.tsx
@@ -66,7 +67,13 @@ export default function VovioMainPage(){
         {/** Sezione Header: Titolo e descrizione del cruscotto. Utilizza Flexbox per la spaziatura verticale coerente.*/}
         <header className="flex flex-col gap-2">
 
-          <h1 className="text-4xl font-extrabold tracking-tight text-gray-900">Vovio Control Center</h1>
+          <div className='flex items-center gap-4'>
+
+            <Image src='/logo.png' alt='Vovio Logo Ufficiale' width={48} height={48} priority className='w-12 h-12 object-contain' />
+
+            <h1 className="text-4xl font-extrabold tracking-tight text-gray-900">Vovio Control Center</h1>
+
+          </div>
 
           <p className="text-gray-500">Pannello di orchestrazione per la pipeline di doppiaggio Multi-Agente</p>
 

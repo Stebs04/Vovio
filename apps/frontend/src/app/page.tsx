@@ -148,7 +148,7 @@ export default function VovioMainPage(){
               Avvia Traduzione
               </button>
 
-              <button className="px-4 py-2 bg-emerald-600 text-white font-semibold rounded-lg hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed" onClick={() => startDubbing(targetLanguage)} disabled={!state.translation}>
+              <button className="px-4 py-2 bg-emerald-600 text-white font-semibold rounded-lg hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed" onClick={() => {if(selectedFile){startDubbing(targetLanguage, selectedFile.name)}}} disabled={!state.translation}>
                 Genera Doppiaggio
               </button>
 
@@ -174,11 +174,16 @@ export default function VovioMainPage(){
             */}
             <div className='p-4 bg-gray-50 rounded-xl border border-gray-100'>
 
-              <p className='text-gray-700 whitespace-pre-wrap text-sm leading-relaxed'>
-                
-                {state.transcription}
+              {/*
+                * UI State: Rendering the raw API response payload for debugging purposes.
+                * Utilizing JSON.stringify to serialize the Object graph into a React-safe String,
+                * preventing "Objects are not valid as a React child" invariant violations.
+                */}
+                <pre className="p-4 bg-gray-900 text-green-400 rounded-md overflow-auto text-xs text-left">
 
-                </p> 
+                  <code>{JSON.stringify(state.transcription, null, 2)}</code>
+
+                </pre>
 
             </div>
 
@@ -206,11 +211,14 @@ export default function VovioMainPage(){
                 Inietta la variabile `state.translation` popolata dal TranslationAgent.*/}
               <div className='p-4 bg-gray-50 rounded-xl border border-gray-100'>
 
-                <p className='text-gray-700 whitespace-pre-wrap text-sm leading-relaxed'>
-
-                  {state.translation}
-
-                </p>
+               {/*
+                  * UI State: Data Inspection for Translation Payload.
+                  * Serializing the Translation Agent's output to prevent React rendering crashes,
+                  * as the agent maintains the timestamped JSON structure rather than a primitive string.
+                  */}
+                <pre className="p-4 bg-gray-900 text-green-400 rounded-md overflow-auto text-xs text-left">
+                  <code>{JSON.stringify(state.translation, null, 2)}</code>
+                </pre>
 
               </div>
               
@@ -235,6 +243,15 @@ export default function VovioMainPage(){
             <div className='bg-white rounded-2xl shadow-sm border border-gray-100 p-6 flex flex-col gap-4'>
               
               <h3 className='text-lg font-bold text-gray-800'>Video Doppiato</h3>
+
+              {/*
+              * UI State: Data Inspection for Dubbing Payload (Final Video).
+              * Validating the output of the TTS/Dubbing Agent before passing it to the HTML5 video player.
+              * Ensures the payload is a valid URL string and not an unexpected nested JSON response.
+              */}
+              <pre className="p-4 bg-gray-900 text-green-400 rounded-md overflow-auto text-xs text-left mb-4">
+                <code>{JSON.stringify(state.finalVideoUrl, null, 2)}</code>
+              </pre>
 
               <video controls={true} className='w-full rounded-xl border border-gray-100 bg-black '
                 src={state.finalVideoUrl}

@@ -12,7 +12,8 @@ transformers==4.44.2
 # Multi-Agent AI Engines
 faster-whisper
 agno
-openai
+google-generativeai
+google-genai
 
 # Multimedia Processing
 moviepy

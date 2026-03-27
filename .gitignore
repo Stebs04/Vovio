@@ -14,3 +14,8 @@ build/
 # File di sistema e chiavi segrete
 .env
 .DS_Store
+
+# File temporanei di elaborazione (Dati effimeri)
+apps/backend/temp/
+*.wav
+*.mp4

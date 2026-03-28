@@ -27,8 +27,13 @@ class SynthesizerAgent:
         Inizializza il motore TTS preaddestrato.
         """
         os.environ["COQUI_TOS_AGREED"] = "1"  # Accetta in automatico la licenza CPML
+        # Legge la variabile d'ambiente USE_CUDA. Se è 'true', usa la GPU. Altrimenti CPU.
+        use_cuda_env = os.environ.get("USE_CUDA", "false").lower() == "true"
+        use_gpu = use_cuda_env and torch.cuda.is_available()
+        if use_cuda_env and not use_gpu:
+            print("[WARNING] È stato richiesto USE_CUDA=true, ma PyTorch non rileva una GPU compatibile. Fallback su CPU.")
         # Inizializza il modello limitando l'elaborazione ad un solo thread/CPU per evitare regressioni
-        self.tts = TTS(model_name=model_name, progress_bar=False, gpu=False)
+        self.tts = TTS(model_name=model_name, progress_bar=False, gpu=use_gpu)
     
     def _chunk_text(self, text: str, max_chars: int = 200) -> list[str]:
         """

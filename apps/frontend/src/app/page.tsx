@@ -148,7 +148,7 @@ export default function VovioMainPage(){
               Avvia Traduzione
               </button>
 
-              <button className="px-4 py-2 bg-emerald-600 text-white font-semibold rounded-lg hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed" onClick={() => {if(selectedFile){startDubbing(targetLanguage, selectedFile.name)}}} disabled={!state.translation}>
+              <button className="px-4 py-2 bg-emerald-600 text-white font-semibold rounded-lg hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed" onClick={() => {if(selectedFile){startDubbing(targetLanguage, selectedFile.name)}}} disabled={!state.translation || !selectedFile}>
                 Genera Doppiaggio
               </button>
 

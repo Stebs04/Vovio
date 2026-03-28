@@ -1,7 +1,7 @@
 
 import json
 # Importa FastAPI e i tipi necessari per gestire endpoint e upload file.
-from fastapi import FastAPI, UploadFile, File
+from fastapi import FastAPI, UploadFile, File, HTTPException
 # Importa BaseModel per validare automaticamente i payload JSON in ingresso.
 from pydantic import BaseModel
 # Importa Path per manipolare percorsi filesystem in modo robusto e portabile.
@@ -10,6 +10,7 @@ from pathlib import Path
 from fastapi.responses import FileResponse
 # Importa il middleware CORS per permettere chiamate dal frontend.
 from fastapi.middleware.cors import CORSMiddleware
+
 
 # Importa la directory temporanea condivisa per gli artefatti di processo.
 from config import TEMP_DIR
@@ -158,6 +159,8 @@ async def generate_dubbing(request: DubbingRequest):
         # Passa il percorso audio usato per il voice cloning.
         reference_audio_path=str(reference_audio_path)
     )
+    if dubbed_audio_path.startswith("[ERRORE"):
+        raise HTTPException(status_code=500, detail=dubbed_audio_path)
 
     # Costruisce il nome del file finale includendo lingua e nome originale.
     final_video_filename = f"final_{request.target_language}_{request.video_filename}"

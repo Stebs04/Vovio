@@ -178,7 +178,7 @@ export const useVovioPipeline = () => {
             setState({
                 ...state,
                 currentStep: 'SUCCESS',
-                finalVideoUrl: 'http://localhost:8000/api/download/${response.final_video}'
+                finalVideoUrl: `http://localhost:8000/api/download/${response.final_video}`
             });
         } catch (error) {
             // ERRORE: Gestione del fallimento nella generazione del video

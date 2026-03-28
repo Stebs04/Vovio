@@ -2,6 +2,18 @@ from TTS.api import TTS
 from pathlib import Path
 from config import TEMP_DIR
 import os
+import torchaudio
+
+# Architecture Fix: Force torchaudio to use 'soundfile' backend on Python 3.12.
+# This prevents the "TorchCodec is required" error by bypassing the experimental 
+# torchcodec driver in favor of a stable, production-ready audio backend.
+try:
+    if "soundfile" in torchaudio.list_audio_backends():
+        torchaudio.set_audio_backend("soundfile")
+except Exception:
+    # Fallback for newer torchaudio versions where set_audio_backend might be deprecated
+    pass
+
 
 class SynthesizerAgent:
     """

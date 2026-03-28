@@ -1,13 +1,13 @@
 from agno.agent import Agent
 
-from agno.models.openai import OpenAIChat
+from agno.models.google import Gemini
 
 class TranslationAgent:
     """
     Agente responsabile della traduzione del testo.
     Utilizza un modello LLM per convertire il testo nella lingua di destinazione specificata.
     """
-    def __init__(self, target_language: str ="eng",  model_id: str="gpt-4o-mini"):
+    def __init__(self, target_language: str ="eng",  model_id: str="gemini-2.5-flash"):
         """
         Inizializza l'agente di traduzione.
 
@@ -24,7 +24,7 @@ class TranslationAgent:
         # Le istruzioni sono rigorose per garantire che l'output sia solo il testo tradotto,
         # pronto per essere passato al modulo TTS (Text-to-Speech) senza metadati indesiderati.
         self.agent = Agent(
-            model=OpenAIChat(id=model_id),
+            model=Gemini(id=model_id),
             description="Sei un traduttore esperto di doppiaggio cinematografico e contenuti multimediali.",
             instructions=[
                 f"Traduci il testo fornito rigorosamente nella lingua: {self.target_language}.",

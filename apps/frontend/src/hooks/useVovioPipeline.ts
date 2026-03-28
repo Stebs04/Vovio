@@ -149,12 +149,12 @@ export const useVovioPipeline = () => {
      * 
      * @param targetLanguage - La lingua in cui doppiare il video.
      */
-    const startDubbing = async (targetLanguage: string) => {
+    const startDubbing = async (targetLanguage: string, videoFileName: string) => {
         // VALIDAZIONE: Verifica la presenza di tutti gli asset necessari (video e traduzione)
-        if (!state.videoFile || !state.translation) {
+        if (!videoFileName|| !state.translation) {
             setState({
                 ...state,
-                error: 'File video o traduzione mancanti. Impossibile procedere con il doppiaggio.'
+                error: 'Asset mancanti. Impossibile procedere con il doppiaggio.'
             });
             return;
         }
@@ -169,7 +169,7 @@ export const useVovioPipeline = () => {
         // ESECUZIONE: Richiede al backend la generazione del video doppiato
         try {
             const response = await generateDubbing({
-                video_filename: state.videoFile.name, // Riferimento al nome del file
+                video_filename: videoFileName, // Riferimento al nome del file
                 translated_text: state.translation,
                 target_language: targetLanguage
             });
@@ -178,7 +178,7 @@ export const useVovioPipeline = () => {
             setState({
                 ...state,
                 currentStep: 'SUCCESS',
-                finalVideoUrl: response.final_video
+                finalVideoUrl: `http://localhost:8000/api/download/${response.final_video}`
             });
         } catch (error) {
             // ERRORE: Gestione del fallimento nella generazione del video

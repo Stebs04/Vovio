@@ -47,7 +47,7 @@ def merge_audio_video(video_path: str, audio_path: str, output_path: str) -> str
     
     try:
         # Imposta la nuova traccia audio, sostituendo quella originale se presente
-        final_video = video_clip.set_audio(audio_clip)
+        final_video = video_clip.with_audio(audio_clip)
         
         # Scrive il video su disco usando codec standard per compatibilità (H.264 + AAC)
         final_video.write_videofile(

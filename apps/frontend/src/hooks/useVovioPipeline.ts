@@ -18,6 +18,10 @@ export interface PipelineState {
     translation: string | null;
     /** Endpoint assoluto per accedere al media finale muxato per la localizzazione */
     finalVideoUrl: string | null;
+    /** Traccia la percentuale di avanzamento del task di doppiaggio */
+    dubbingProgress: number;
+    /** Stringa descrittiva dello step attualmente in esecuzione sul backend */
+    dubbingStage: string | null;
     /** Accumulatore per le stringhe di eccezione destinate alla UI */
     error: string | null;
 }
@@ -28,6 +32,8 @@ const initialState: PipelineState = {
     transcription: null,
     translation: null,
     finalVideoUrl: null,
+    dubbingProgress: 0,
+    dubbingStage: null,
     error: null,
 }
 
@@ -162,6 +168,12 @@ export const useVovioPipeline = () => {
            // Ciclo di polling asincrono per monitorare l'evoluzione della coda su Redis/Memory.
            while(true){
                 const statusResponse = await checkJobStatus(initResponse.job_id);
+                // Aggiorna lo stato locale con la percentuale di completamento e la fase corrente del task
+                setState(prevState => ({
+                    ...prevState,
+                    dubbingProgress: statusResponse.progress,
+                    dubbingStage: statusResponse.stage
+                }))
                 if( statusResponse.status === 'completed'){
                     setState({
                         ...state,

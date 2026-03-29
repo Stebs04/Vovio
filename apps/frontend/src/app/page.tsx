@@ -232,7 +232,34 @@ export default function VovioMainPage(){
 
             </div>
 
-          )} 
+          )}
+
+          {state.currentStep === 'DUBBING' && (
+            <div className='bg-white rounded-2xl shadow-sm border border-gray-100 p-8 flex flex-col gap-6 my-4'>
+              <div className="flex justify-between items-end">
+                <div className="flex flex-col gap-1">
+                  <span className="text-xs font-bold text-gray-400 uppercase tracking-widest">Status Doppiatore</span>
+                  <span className="text-xl font-extrabold text-blue-600 capitalize">
+                    {state.dubbingStage?.replace('_', ' ') || 'Inizializzazione...'}
+                  </span>
+                </div>
+                <div className="text-right">
+                  <span className="text-3xl font-black text-blue-600">{state.dubbingProgress}%</span>
+                </div>
+              </div>
+
+              <div className="w-full bg-gray-100 rounded-full h-4 overflow-hidden p-1 border border-gray-50">
+                <div 
+                  className="bg-blue-600 h-full rounded-full transition-all duration-1000 ease-in-out shadow-sm"
+                  style={{ width: `${state.dubbingProgress}%` }}
+                />
+              </div>
+
+              <p className="text-sm text-gray-400 text-center italic">
+                Sintesi neurale in corso. Non ricaricare la pagina per non interrompere il worker.
+              </p>
+            </div>
+          )}
 
           {/* * Risultato Doppiaggio (Player Video): 
             * Renderizzato solo al completamento dell'intera pipeline.

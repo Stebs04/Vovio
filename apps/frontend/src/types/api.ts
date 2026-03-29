@@ -64,6 +64,10 @@ export interface TranscriptionResponse {
 export interface JobStatusResponse {
     /** Discreto di macchina a stati per l'avanzamento dell'elaborazione */
     status: 'pending' | 'processing' | 'completed' | 'failed';
+    /** Percentuale di completamento del task (0-100) */
+    progress: number;
+    /** Identificativo dello step in corso (es. "initializing", "merging_video") */
+    stage: string;
     /** Articolazione del risultato, valorizzata eslusivamente nello stato "completed" */
     result?: {
         /** Il nome finale del file video renderizzato, pronto per il serve o il download */

@@ -1,9 +1,16 @@
 #!/bin/bash
 
-# [DevX] Configurazione Hardware (Graceful Degradation).
-# Iniettiamo la variabile di ambiente nel processo padre. Tutti i worker Python figli la erediteranno.
-# Impostare a 1 per forzare l'uso della GPU (se CUDA è correttamente configurato nel sistema).
-export USE_CUDA=0
+# [DevX] Configurazione Hardware Dinamica (Template Configuration Pattern).
+# 1. Verifica l'esistenza del file .env locale (ignorato da Git).
+if [ -f ".env" ]; then
+    echo "[Bootstrap] Rilevato file .env locale. Estrazione configurazioni..."
+    # Estrae solo le variabili valide ignorando i commenti e le inietta nell'ambiente corrente.
+    export $(grep -v '^#' .env | xargs)
+fi
+
+# 2. Sensible Default (Graceful Degradation).
+# Se la variabile USE_CUDA non è stata fornita dal .env, applica il fallback sicuro a 0 (modalità CPU).
+export USE_CUDA=${USE_CUDA:-0}
 echo "[Bootstrap] Inizializzazione Ambiente Vovio. Modalità CUDA: $USE_CUDA"
 
 # [DevX] Gestione del ciclo di vita dei processi (Anti-Zombie).

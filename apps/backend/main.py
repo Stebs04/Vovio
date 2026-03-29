@@ -1,204 +1,204 @@
 
 import json
-# Importa FastAPI e i tipi necessari per gestire endpoint e upload file.
-from fastapi import FastAPI, UploadFile, File, HTTPException
-# Importa BaseModel per validare automaticamente i payload JSON in ingresso.
-from pydantic import BaseModel
-# Importa Path per manipolare percorsi filesystem in modo robusto e portabile.
 from pathlib import Path
-# Importa la risposta file-streaming per consentire il download di file elaborati.
+from uuid import uuid4
+
+from fastapi import FastAPI, UploadFile, File, HTTPException, BackgroundTasks, status
 from fastapi.responses import FileResponse
-# Importa il middleware CORS per permettere chiamate dal frontend.
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 
-
-# Importa la directory temporanea condivisa per gli artefatti di processo.
 from config import TEMP_DIR
-# Importa le utility di estrazione audio e fusione audio/video basate su ffmpeg.
 from utils.video_processing import extract_audio, merge_audio_video
-
-# Importa l'agente incaricato della trascrizione automatica.
 from agents.transcriber import TranscriptionAgent
-# Importa l'agente incaricato della traduzione testuale.
 from agents.translator import TranslationAgent
-# Importa l'agente incaricato della sintesi vocale (TTS).
 from agents.synthesizer import SynthesizerAgent
 
-# Crea l'applicazione FastAPI con metadati utili a documentazione e versionamento.
+# Store in-memory temporaneo per monitorare lo stato dei job asincroni
+job_store = {}
+
 app = FastAPI(
-    # Imposta il titolo esposto nella documentazione OpenAPI.
     title="Vovio Backend",
-    # Descrive sinteticamente lo scopo del servizio backend.
-    description="API per trascrizione e traduzione video automatizzata",
-    # Definisce la versione corrente dell'API.
+    description="API per la trascrizione, traduzione e doppiaggio automatizzato di video.",
     version="0.1.0"
 )
 
-# Registra il middleware CORS per abilitare le richieste dal client web locale.
+# Configurazione CORS per consentire le comunicazioni dal frontend locale
 app.add_middleware(
-    # Specifica la classe middleware da applicare alla pipeline HTTP.
     CORSMiddleware,
-    # Consente richieste soltanto dall'origine frontend in sviluppo.
     allow_origins=["http://localhost:3000"],
-    # Permette invio di cookie/header credenziali cross-origin.
     allow_credentials=True,
-    # Consente tutti i metodi HTTP (GET, POST, ecc.) per semplicità in sviluppo.
     allow_methods=["*"],
-    # Consente tutti gli header HTTP personalizzati inviati dal client.
     allow_headers=["*"],
 )
 
-# Inizializza una sola volta l'agente di trascrizione per evitare costi ripetuti a runtime.
+# Inizializzazione single-instance degli agenti per ottimizzare l'uso delle risorse e ridurre la latenza
 transcriber_agent = TranscriptionAgent()
-# Inizializza una sola volta l'agente di sintesi per ridurre la latenza delle richieste.
 synthesizer_agent = SynthesizerAgent()
 
 
 class TranslationRequest(BaseModel):
     """
-    Modello Pydantic per la richiesta di traduzione.
-    Definisce la struttura attesa per il corpo della richiesta JSON.
+    Payload per la richiesta di traduzione.
+    Supporta sia testo semplice (str) che il formato strutturato restituito da Whisper (list).
     """
-    # Architettura: Usiamo la Type Union (|) per permettere a Pydantic di accettare
-    # sia stringhe semplici che le liste di dizionari generate da Whisper.
     text: str | list       
     target_language: str
 
 
-# Definisce il modello dati della richiesta di doppiaggio video.
 class DubbingRequest(BaseModel):
-    # Nome del file video già caricato nella cartella temporanea.
+    """
+    Payload per la richiesta di doppiaggio.
+    Contiene i riferimenti al video, il testo tradotto e la lingua di destinazione.
+    """
     video_filename: str
-    # Testo tradotto che verrà convertito in parlato.
     translated_text: str | list
-    # Codice della lingua di destinazione per la sintesi vocale.
     target_language: str
 
 
-# Espone un endpoint di health-check per verificare rapidamente lo stato del backend.
 @app.get("/")
-# Definisce una coroutine asincrona che restituisce metadati di stato servizio.
 async def get_status():
-    # Restituisce un dizionario serializzato in JSON con stato e versione.
+    """Endpoint di health-check per verificare lo stato e l'uptime del backend."""
     return {
-        # Indica che il servizio risulta operativo.
         "status": "operational",
-        # Identifica il nome logico dell'applicazione.
         "app": "vovio",
-        # Comunica la versione API esposta.
         "version": "0.1.0"
     }
 
 
-# Espone l'endpoint che riceve un video e produce la relativa trascrizione.
 @app.post("/api/transcribe")
-# Definisce la funzione asincrona che accetta un file multipart obbligatorio.
 async def transcribe_video(file: UploadFile = File(...)):
-    # Calcola il percorso di salvataggio temporaneo del video caricato.
+    """
+    Riceve un file video, ne estrae la traccia audio e restituisce la trascrizione testuale.
+    """
     video_path = TEMP_DIR / file.filename
-    # Apre il file destinazione in modalità binaria di scrittura.
+    
+    # Salvataggio asincrono del file video caricato
     with open(video_path, "wb") as buffer:
-        # Legge il contenuto upload asincrono e lo scrive sul filesystem locale.
         buffer.write(await file.read())
 
-    # Estrae la traccia audio dal video per poterla inviare al motore di ASR.
+    # Estrazione dell'audio necessaria per l'elaborazione del modello ASR (Automatic Speech Recognition)
     audio_path = extract_audio(str(video_path))
-
-    # Esegue la trascrizione automatica passando il percorso audio estratto.
     transcription_data = transcriber_agent.transcribe(str(audio_path))
 
-    # Restituisce filename e payload di trascrizione al client chiamante.
     return {"filename": file.filename, "transcription": transcription_data}
 
 
 @app.post("/api/translate")
 async def translate_text(request: TranslationRequest):
     """
-    Endpoint per la traduzione del testo.
+    Traduce il testo fornito nella lingua di destinazione specificata.
+    Preserva la struttura JSON dei segmenti se l'input proviene da Whisper.
     """
+    # Istanziamo l'agente di traduzione con la lingua target impostata
     translator = TranslationAgent(target_language=request.target_language)
     
-    # Data Normalization: Se il payload in ingresso è la lista di segmenti di Whisper,
-    # la serializziamo in una stringa JSON prima di iniettarla nel prompt del LLM, 
-    # affinché il modello ne preservi la struttura temporale.
+    # Normalizzazione: serializziamo le strutture complesse per mantenere i metadati temporali nel prompt del LLM
     payload = request.text if isinstance(request.text, str) else json.dumps(request.text)
-    
     translated_text = translator.translate(payload)
     
     return {"original_text": request.text, "translated_text": translated_text}
 
 
-# Espone l'endpoint che genera un nuovo video doppiato con audio sintetizzato.
-@app.post("/api/dub")
-# Definisce la funzione asincrona che orchestra sintesi vocale e merge finale.
-async def generate_dubbing(request: DubbingRequest):
-    # Costruisce il percorso del video sorgente a partire dal nome file ricevuto.
-    video_path = TEMP_DIR / request.video_filename
-
-    # Deriva il nome del file WAV di riferimento vocale dal nome base del video.
-    reference_audio_path = TEMP_DIR / f"{Path(request.video_filename).stem}.wav"
-
-    text_to_speak = request.translated_text
+def process_dubbing_task(job_id: str, request: DubbingRequest):
+    """
+    Worker in background per l'elaborazione asincrona del doppiaggio:
+    1. Parsing e sanitizzazione del testo da sintetizzare
+    2. Clonazione vocale e generazione della nuova traccia audio (TTS)
+    3. Muxing dell'audio generato con il video originale
+    """
     try:
-        if isinstance(text_to_speak, str):
-            parsed_data = json.loads(text_to_speak)
-        else:
-            parsed_data = text_to_speak
+        job_store[job_id]["status"] = "processing"
+        
+        video_path = TEMP_DIR / request.video_filename
+        # Si assume che l'audio di riferimento per il voice cloning sia il .wav estratto in fase di trascrizione
+        reference_audio_path = TEMP_DIR / f"{Path(request.video_filename).stem}.wav"
+        
+        text_to_speak = request.translated_text
+        
+        # Gestione flessibile del payload testuale: decodifica di stringhe JSON e unione di segmenti multipli
+        try:
+            parsed_data = json.loads(text_to_speak) if isinstance(text_to_speak, str) else text_to_speak
+            if isinstance(parsed_data, list):
+                # Estrae e concatena solo le porzioni di testo effettivo ignorando i metadati opzionali
+                text_to_speak = " ".join([
+                    item.get("text", "") 
+                    for item in parsed_data 
+                    if isinstance(item, dict) and "text" in item
+                ])
+        except Exception:
+            # Fallback passivo: in caso di errori di parsing si tenta di passare il dato non elaborato al sintetizzatore
+            pass
 
-        if isinstance(parsed_data, list):
-            text_to_speak= " ".join([item ["text"] for item in parsed_data if "text" in item])
-    except:
-        pass
+        # Generazione della traccia audio doppiata localizzata
+        dubbed_audio_path = synthesizer_agent.generate_audio(
+            text=text_to_speak,
+            target_language=request.target_language,
+            reference_audio_path=str(reference_audio_path)
+        )
+        
+        if dubbed_audio_path.startswith("[ERRORE"):
+            raise ValueError(f"Fallimento durante il TTS: {dubbed_audio_path}")
 
-    # Genera l'audio doppiato usando testo tradotto, lingua target e timbro di riferimento.
-    dubbed_audio_path = synthesizer_agent.generate_audio(
-        # Passa il testo da convertire in voce.
-        text=text_to_speak,
-        # Passa il codice lingua per il motore TTS.
-        target_language=request.target_language,
-        # Passa il percorso audio usato per il voice cloning.
-        reference_audio_path=str(reference_audio_path)
-    )
-    if dubbed_audio_path.startswith("[ERRORE"):
-        raise HTTPException(status_code=500, detail=dubbed_audio_path)
+        final_video_filename = f"final_{request.target_language}_{request.video_filename}"
+        final_video_path = TEMP_DIR / final_video_filename
 
-    # Costruisce il nome del file finale includendo lingua e nome originale.
-    final_video_filename = f"final_{request.target_language}_{request.video_filename}"
-    # Costruisce il percorso completo del file video finale nella cartella temporanea.
-    final_video_path = TEMP_DIR / final_video_filename
+        # Integrazione della nuova sorgente audio nel flusso video originario
+        merge_audio_video(
+            video_path=str(video_path),
+            audio_path=dubbed_audio_path,
+            output_path=str(final_video_path)
+        )
+        
+        # Commit di successo nello state store
+        job_store[job_id].update({
+            "status": "completed",
+            "result": {"final_video": final_video_filename}
+        })
+        
+    except Exception as e:
+        # Gestione centralizzata delle eccezioni per prevenire il fallimento silenzioso del worker
+        job_store[job_id].update({
+            "status": "failed",
+            "error": str(e)
+        })
 
-    # Esegue il merge tra video originale e nuova traccia audio doppiata.
-    merge_audio_video(
-        # Fornisce il percorso del video sorgente.
-        video_path=str(video_path),
-        # Fornisce il percorso dell'audio sintetizzato.
-        audio_path=dubbed_audio_path,
-        # Fornisce il percorso di output del video finale.
-        output_path=str(final_video_path)
-    )
+@app.post("/api/dub", status_code=status.HTTP_202_ACCEPTED)
+async def generate_dubbing(request: DubbingRequest, background_tasks: BackgroundTasks):
+    """
+    Accetta una richiesta di doppiaggio inoltrando l'elaborazione intensiva a un background worker.
+    Fornisce contestualmente un job_id abilitando i meccanismi di polling lato client.
+    """
+    job_id = str(uuid4())
+    job_store[job_id] = {
+        "status": "pending",
+        "result": None,
+        "error": None
+    }
+    
+    background_tasks.add_task(process_dubbing_task, job_id, request)
 
-    # Restituisce esito positivo e nome del file generato.
     return {
-        # Flag semantico di completamento processo.
-        "status": "success",
-        # Nome del file finale scaricabile dal frontend.
-        "final_video": final_video_filename
+        "status": "accepted",
+        "job_id": job_id,
+        "message": "Il doppiaggio è in corso. Usa il job_id per monitorare lo stato."
     }
 
 
-# Espone l'endpoint di download per file generati durante la pipeline.
 @app.get("/api/download/{filename}")
-# Definisce la funzione asincrona che restituisce lo stream del file richiesto.
 async def download_file(filename: str):
-    # Costruisce il path assoluto/relativo nella directory temporanea controllata.
+    """Endpoint per gestire il download o lo streaming dei file video generati dalla pipeline."""
     file_path = TEMP_DIR / filename
 
-    # Restituisce il file in streaming impostando media type video MP4.
     return FileResponse(
-        # Percorso effettivo del file da inviare al client.
         path=str(file_path),
-        # Tipo MIME usato dal browser per interpretare correttamente il contenuto.
         media_type="video/mp4",
-        # Nome file proposto al client nel download.
         filename=filename
     )
+
+@app.get("/api/jobs/{job_id}")
+async def get_job_status(job_id: str):
+    """Endpoint di polling per ispezionare asincronamente lo stadio di avanzamento dei task."""
+    if job_id not in job_store:
+        raise HTTPException(status_code=404, detail="Job non trovato!")
+    return job_store[job_id]

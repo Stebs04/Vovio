@@ -6,44 +6,43 @@ from TTS.api import TTS
 from pathlib import Path
 from config import TEMP_DIR
 
-# Fix architetturale: Forza torchaudio a utilizzare il backend 'soundfile' in Python 3.12 
-# per prevenire problemi di compatibilità ed evitare fallimenti con driver sperimentali.
+# Forza torchaudio a utilizzare il backend 'soundfile' in Python 3.12+ 
+# per evitare bug di compatibilità.
 try:
     if "soundfile" in torchaudio.list_audio_backends():
         torchaudio.set_audio_backend("soundfile")
 except Exception:
-    # Fallback per le versioni più recenti dove set_audio_backend potrebbe essere deprecato
+    # Fallback per versioni in cui set_audio_backend è deprecato
     pass
 
 
 class SynthesizerAgent:
     """
-    Agente per la sintesi vocale (Text-to-Speech).
-    Implementa una gestione avanzata della memoria RAM e il partizionamento del testo (chunking)
-    al fine di prevenire il fenomeno dell'Attention Collapse nel modello XTTS_v2.
+    Agente per la sintesi vocale (TTS).
+    Implementa il chunking del testo per prevenire l'attention collapse nel modello XTTS_v2.
     """
     def __init__(self, model_name: str="tts_models/multilingual/multi-dataset/xtts_v2"):
         """
-        Inizializza il motore TTS preaddestrato.
+        Inizializza il motore TTS.
         """
-        os.environ["COQUI_TOS_AGREED"] = "1"  # Accettazione programmatica della licenza CPML per eludere interruzioni bloccanti
+        os.environ["COQUI_TOS_AGREED"] = "1"  # Accetta la licenza CPML per evitare blocchi interattivi
         
-        # Verifica della disponibilità di accelerazione hardware tramite variabili d'ambiente e supporto nativo PyTorch
+        # Gestione hardware: verifica CUDA ed esegue il fallback su CPU se necessario
         use_cuda_env = os.environ.get("USE_CUDA", "false").lower() == "true"
         use_gpu = use_cuda_env and torch.cuda.is_available()
         
         if use_cuda_env and not use_gpu:
-            print("[AVVISO] Accelerazione hardware (CUDA) richiesta ma non disponibile. Ripiegamento automatico su elaborazione CPU.")
+            print("[AVVISO] CUDA richiesta ma non disponibile. Fallback su CPU in corso.")
             
-        # Istanziamento del motore TTS con parametri di esecuzione ottimizzati (gestione dinamica del device)
+        # Inizializza il modello TTS
         self.tts = TTS(model_name=model_name, progress_bar=False, gpu=use_gpu)
     
     def _chunk_text(self, text: str, max_chars: int = 200) -> list[str]:
         """
-        Segmenta una stringa di testo in frammenti (chunk) rispettando una lunghezza massima predefinita.
-        Preserva i punti critici di punteggiatura per mantenere la prosodia naturale durante la sintesi.
+        Divide il testo in chunk di lunghezza massima `max_chars`.
+        Preserva la punteggiatura per mantenere una prosodia naturale.
         """
-        # Divide il testo utilizzando un'espressione regolare mirata alla punteggiatura terminale (punti finali, esclamativi e interrogativi)
+        # Split sulla punteggiatura finale per preservare le frasi
         sentences = re.split(r'(?<=[.!?]) +', text.replace('\n', ' '))
         chunks = []
         current_chunk = ""
@@ -54,7 +53,7 @@ class SynthesizerAgent:
             else:
                 if current_chunk.strip():
                     chunks.append(current_chunk.strip())
-                # Logica di fallback: elaborazione stringhe eccezionalmente lunghe che non superano la soglia di troncamento standard preimpostato
+                # Fallback per frasi più lunghe di max_chars: divide per parole
                 if len(sentence) >= max_chars:
                     words = sentence.split(' ')
                     temp_chunk = ""
@@ -73,24 +72,27 @@ class SynthesizerAgent:
             
         return chunks
 
-    def generate_audio(self, text: str, target_language: str, reference_audio_path: str) -> str:
+    def generate_audio(self, text, target_language, reference_audio_path, progress_callback=None):
         """
-        Produce un campionamento vocale clonando i timbri dal file audio sorgente per generare
-        nuovo contenuto parlato nella lingua e dal testo di input stabiliti.
+        Genera l'audio TTS clonando la voce dal file di riferimento,
+        nella lingua e col testo specificati.
         """
         try:
             output_filename = f"dubbed_{target_language}.wav"
             output_path = str(TEMP_DIR / output_filename)
             
-            # 1. Segmentazione formale del testo in partizioni stabili pre-elaborative (limitazione del carico LLM)
+            # 1. Chunking del testo
             chunks = self._chunk_text(text)
             audio_tensors = []
             
-            # 2. Generazione iterativa della forma d'onda acustica salvando ogni segmento virtuale in RAM
-            for chunk in chunks:
+            # 2. Sintesi audio per ogni chunk
+            for i, chunk in enumerate(chunks):
+                if progress_callback:
+                    current_pct = int ((i/len(chunks)) * 100)
+                    progress_callback(current_pct, "synthesizing")
                 if not chunk.strip(): 
                     continue
-                # Il metodo core tts.tts produce un array sequenziale di elementi floating-point rappresentante il flusso audio nativo
+                # Generazione dell'array audio
                 wav_array = self.tts.tts(
                     text=chunk, 
                     speaker_wav=reference_audio_path, 
@@ -99,12 +101,12 @@ class SynthesizerAgent:
                 audio_tensors.append(torch.tensor(wav_array))
             
             if not audio_tensors:
-                raise ValueError("Eccezione di generazione: Nessun frammento di testo valido individuabile in post-segmentazione.")
+                raise ValueError("Nessun chunk di testo valido da sintetizzare.")
                 
-            # 3. Concatenazione tensoriale (fusione sull'asse primario) con dimensionamento di un singolo canale stereo compatibile [1, sample_frames]
+            # 3. Concatenazione dei tensori audio
             final_audio = torch.cat(audio_tensors).unsqueeze(0)
             
-            # 4. Scrittura finale bufferizzata sul disco fisso (frequenza di campionamento fissa del modello XTTS_v2 equivalente a 24.000 Hz)
+            # 4. Salvataggio del file su disco (frequenza di campionamento XTTS_v2: 24kHz)
             torchaudio.save(output_path, final_audio, 24000)
             
             return output_path

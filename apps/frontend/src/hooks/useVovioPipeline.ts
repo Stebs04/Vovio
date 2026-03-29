@@ -1,31 +1,27 @@
 import { useState } from 'react';
 import {
-     transcribeVideo, translateText, generateDubbing 
-    } from '@/lib/api';
+     transcribeVideo, translateText, generateDubbing, checkJobStatus
+} from '@/lib/api';
 
 /**
- * Rappresenta lo stato della pipeline di elaborazione video.
- * Tiene traccia della fase corrente, dei dati di input/output e di eventuali errori.
+ * Struttura dati che rappresenta lo stato globale della pipeline asincrona.
+ * Modella una macchina a stati per tenere traccia dei progressi, dei payload e dei potenziali fault.
  */
 export interface PipelineState {
-    /** La fase attuale del flusso di lavoro. */
+    /** Identificatore del nodo corrente nella macchina a stati della pipeline */
     currentStep: 'IDLE' | 'TRANSCRIBING' | 'TRANSLATING' | 'DUBBING' | 'SUCCESS' | 'ERROR';
-    /** Il file video sorgente caricato dall'utente. */
+    /** Referenza locale (nativa HTML5) al file video sottoposto dall'utente */
     videoFile: File | null;
-    /** Il testo della trascrizione estratto dal video. */
+    /** Output JSON o testuale restituito dall'ASR post-elaborazione */
     transcription: string | null;
-    /** Il testo tradotto generato dalla trascrizione. */
+    /** Output testuale della traduzione inferita dal LLM */
     translation: string | null;
-    /** L'URL del video finale doppiato. */
+    /** Endpoint assoluto per accedere al media finale muxato per la localizzazione */
     finalVideoUrl: string | null;
-    /** Messaggio di errore in caso di fallimento della pipeline. */
+    /** Accumulatore per le stringhe di eccezione destinate alla UI */
     error: string | null;
 }
 
-/**
- * Stato iniziale della pipeline.
- * Inizia in stato IDLE senza dati caricati.
- */
 const initialState: PipelineState = {
     currentStep: 'IDLE',
     videoFile: null,
@@ -36,32 +32,33 @@ const initialState: PipelineState = {
 }
 
 /**
- * Hook personalizzato per gestire la pipeline di elaborazione video Vovio.
- * Gestisce le transizioni di stato tra le fasi di trascrizione, traduzione e doppiaggio.
+ * Hook custom React per la gestione del ciclo di vita della pipeline di Vovio.
+ * Gestisce la persistenza in locale del flusso (Trascrizione -> Traduzione -> Doppiaggio) e le policy di riprova/polling.
+ * 
+ * @returns Tuple contenente l'oggetto dello stato reattivo e i controller di transizione.
  */
 export const useVovioPipeline = () => {
-    // Inizializza lo stato reattivo per gestire il ciclo di vita della pipeline
     const [state, setState] = useState<PipelineState>(initialState);
 
     /**
-     * Salva il file video selezionato dall'utente nello stato locale.
+     * Esegue il binding del media al context della pipeline.
+     * 
+     * @param file - Il payload multimediale da agganciare allo stream locale.
      */
     const setFile = (file: File) => {
-        // Aggiorna lo stato mantenendo le proprietà esistenti e sovrascrivendo il file video
         setState({
             ...state,
             videoFile: file
-        })
+        });
     }
 
     /**
-     * Avvia il processo asincrono di trascrizione.
-     * Cambia lo stato per indicare il caricamento e chiama il Service Layer API.
+     * Invoca il layer di rete per estrarre la grammatica e il testo dal video aggregato.
+     * 
+     * @param file - Elemento opzionalmente disaccoppiato dallo stato locale, passato direttamente.
      */
-    const startTranscription = async (file:File) => {
-        // VALIDAZIONE: Verifica preliminare per assicurarsi che un file sia stato caricato
+    const startTranscription = async (file: File) => {
         if (!file) {
-            // Se nessun file è presente, imposta un errore nello stato e interrompe
             setState({
                 ...state,
                 error: 'Nessun file selezionato. Impossibile avviare la trascrizione.'
@@ -69,128 +66,126 @@ export const useVovioPipeline = () => {
             return;
         }
 
-        // SETUP: Aggiorna lo stato per indicare l'inizio della trascrizione (loading spinner)
         setState({
             ...state,
-            videoFile:file,
+            videoFile: file,
             currentStep: 'TRANSCRIBING',
-            error: null // Azzera eventuali errori precedenti
-        })
+            error: null
+        });
 
-        // ESECUZIONE: Avvia la pipeline e gestisce la Graceful Degradation in caso di fault di rete
         try {
-            // Esegue la chiamata all'API di trascrizione passando il file video
             const response = await transcribeVideo(file);
             
-            // SUCCESSO: Aggiorna lo stato con la trascrizione ricevuta dal backend
             setState({
                 ...state,
-                currentStep: 'IDLE', // Riporta lo stato a IDLE per l'azione successiva
+                currentStep: 'IDLE',
                 transcription: response.transcription,
-            })
+            });
         } catch (error) {
-            // ERRORE: Gestisce le eccezioni durante la comunicazione con il servizio Whisper
             setState({
                 ...state,
                 currentStep: 'ERROR',
-                error: 'Errore durante la comunicazione con Whisper'
-            })
+                error: 'Errore generico durante la comunicazione con il servizio ASR (Whisper).'
+            });
         }
     }
 
     /**
-     * Avvia il processo di traduzione del testo trascritto.
+     * Promuove la trascrizione in cache locale in una lingua specificata dall'user intent.
      * 
-     * @param targetLanguage - Il codice della lingua di destinazione (es. 'en', 'es', 'fr').
+     * @param targetLanguage - Locale string della lingua target (es. 'en', 'es').
      */
     const startTranslation = async (targetLanguage: string) => {
-        // VALIDAZIONE: Verifica che la trascrizione sia disponibile come input
         if (!state.transcription) {
             setState({
                 ...state,
-                error: "Nessuna trascrizione presente. Impossibile avviare la traduzione."
+                error: "Dati di origine mancanti. Nessuna trascrizione allocata per la traduzione."
             });
             return;
         }
 
-        // SETUP: Imposta lo stato su TRANSLATING per feedback visivo all'utente
         setState({
             ...state,
             currentStep: 'TRANSLATING',
             error: null
         });
 
-        // ESECUZIONE: Invoca il servizio di traduzione
         try {
             const response = await translateText({
                 text: state.transcription,
                 target_language: targetLanguage
             });
             
-            // SUCCESSO: Memorizza il testo tradotto nello stato
             setState({
                 ...state,
                 currentStep: 'IDLE',
                 translation: response.translated_text
             });
         } catch (error) {
-            // ERRORE: Notifica il fallimento del processo di traduzione
             setState({
                 ...state,
                 currentStep: 'ERROR',
-                error: 'Si è verificato un errore durante la traduzione dei sottotitoli.'
+                error: 'Interruzione inaspettata durante la pipeline di traduzione del LLM.'
             });
         }
     }
 
     /**
-     * Avvia il processo di doppiaggio (dubbing) del video originale.
-     * Utilizza il testo tradotto per generare una nuova traccia audio sincronizzata.
+     * Triggera il task di back-office intensivo per sintetizzare la voce, clonare il pitch e ricreare il media.
+     * Utilizza un meccanismo di short-polling bloccante per attendere il fine ciclo (async worker resolution).
      * 
-     * @param targetLanguage - La lingua in cui doppiare il video.
+     * @param targetLanguage - Locale string configurato per il modello TTS.
+     * @param videoFileName - Riferimento logico al file di spool per il backend.
      */
     const startDubbing = async (targetLanguage: string, videoFileName: string) => {
-        // VALIDAZIONE: Verifica la presenza di tutti gli asset necessari (video e traduzione)
-        if (!videoFileName|| !state.translation) {
+        if (!videoFileName || !state.translation) {
             setState({
                 ...state,
-                error: 'Asset mancanti. Impossibile procedere con il doppiaggio.'
+                error: 'Impossibile risolvere il job: asset multimediali o testuali non inizializzati.'
             });
             return;
         }
 
-        // SETUP: Indica l'avvio del processo di generazione audio/video
         setState({
             ...state,
             currentStep: 'DUBBING',
-            error: null // Reset degli errori
+            error: null
         });
 
-        // ESECUZIONE: Richiede al backend la generazione del video doppiato
         try {
-            const response = await generateDubbing({
-                video_filename: videoFileName, // Riferimento al nome del file
-                translated_text: state.translation,
-                target_language: targetLanguage
-            });
+           const initResponse = await generateDubbing({
+            video_filename: videoFileName,
+            translated_text: state.translation,
+            target_language: targetLanguage
+           });
 
-            // SUCCESSO: Salva l'URL del video finale per la visualizzazione/download
-            setState({
-                ...state,
-                currentStep: 'SUCCESS',
-                finalVideoUrl: `http://localhost:8000/api/download/${response.final_video}`
-            });
+           // Ciclo di polling asincrono per monitorare l'evoluzione della coda su Redis/Memory.
+           while(true){
+                const statusResponse = await checkJobStatus(initResponse.job_id);
+                if( statusResponse.status === 'completed'){
+                    setState({
+                        ...state,
+                        currentStep: 'SUCCESS',
+                        finalVideoUrl: `http://localhost:8000/api/download/${statusResponse.result?.final_video}`
+                    });
+                    // Rilascio del runtime lock alla corretta composiszione del file.
+                    break;
+                } else if(statusResponse.status === 'failed'){
+                    throw new Error(statusResponse.error || "Fallimento opaco del task di backend.");
+                }
+                
+                // Sleep deterministico per prevenire l'esaurimento del Thread Pool e limitare le RPC calls (3 sec).
+                await new Promise((resolve) => setTimeout(resolve, 3000));
+           } 
         } catch (error) {
-            // ERRORE: Gestione del fallimento nella generazione del video
             setState({
                 ...state,
                 currentStep: 'ERROR',
-                error: "Impossibile generare il video doppiato. Riprovare più tardi."
+                error: error instanceof Error ? error.message : "Fallimento critico nell'orchestratore del Worker video."
             });
         }
     }
 
-    // EXPORT: Restituisce state e funzioni ai componenti React
     return {
         state,
         setFile,

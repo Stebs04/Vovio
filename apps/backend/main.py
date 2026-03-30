@@ -87,18 +87,34 @@ async def transcribe_video(file: UploadFile = File(...)):
 @app.post("/api/translate")
 async def translate_text(request: TranslationRequest):
     """
-    Traduce il testo fornito nella lingua target specificata.
-    Gestisce automaticamente la serializzazione JSON se l'input proviene da Whisper.
+    Endpoint per tradurre il testo estratto dalla trascrizione.
+    Gestisce sia stringhe singole che liste di frammenti (chunks) provenienti da Whisper.
     """
-    # Istanzia il traduttore per la lingua target
+    # Inizializza l'agente di traduzione con la lingua di destinazione richiesta
     translator = TranslationAgent(target_language=request.target_language)
     
-    # Serializza il payload per mantenere eventuali metadati temporali
-    payload = request.text if isinstance(request.text, str) else json.dumps(request.text)
-    translated_text = translator.translate(payload)
+    # Se il payload di input è una lista (tipico array di segmenti da Whisper)
+    if isinstance(request.text, list):
+        translated_chunks = []
+        for chunk in request.text:
+            # Verifica che il chunk sia un dizionario valido contenente la chiave "text"
+            if isinstance(chunk, dict) and "text" in chunk:
+                # Esegue la traduzione per il singolo frammento
+                adapted_text = translator.translate(chunk["text"])
+                
+                # Crea una copia del chunk originale per preservare i timestamp
+                translated_chunk = chunk.copy()
+                translated_chunk["text"] = adapted_text
+                
+                # Aggiunge il chunk tradotto alla lista finale
+                translated_chunks.append(translated_chunk)
+                
+        return {"original_text": request.text, "translated_text": translated_chunks}
     
-    return {"original_text": request.text, "translated_text": translated_text}
-
+    else:
+        # Fallback per payload composti da una singola stringa grezza
+        translated_text = translator.translate(request.text, duration_second=0.0)
+        return {"original_text": request.text, "translated_text": translated_text}
 
 def process_dubbing_task(job_id: str, request: DubbingRequest):
     """

@@ -87,18 +87,46 @@ async def transcribe_video(file: UploadFile = File(...)):
 @app.post("/api/translate")
 async def translate_text(request: TranslationRequest):
     """
-    Traduce il testo fornito nella lingua target specificata.
-    Gestisce automaticamente la serializzazione JSON se l'input proviene da Whisper.
+    Endpoint di orchestrazione per la fase di traduzione (Data Flow: Trascrizione -> Traduzione -> Sintesi).
+    Il main.py funge da Orchestratore puro: non conosce i dettagli implementativi del traduttore, 
+    ma si occupa esclusivamente di smistare i dati (Decoupling della Pipeline).
     """
-    # Istanzia il traduttore per la lingua target
+    # Inizializza l'agente traduttore, limitandosi a passare i parametri di configurazione base.
     translator = TranslationAgent(target_language=request.target_language)
     
-    # Serializza il payload per mantenere eventuali metadati temporali
-    payload = request.text if isinstance(request.text, str) else json.dumps(request.text)
-    translated_text = translator.translate(payload)
-    
-    return {"original_text": request.text, "translated_text": translated_text}
+    # [PATTERN: Input Normalization]
+    # Invece di usare un'Iterazione Sequenziale Bloccante (ciclo for) che genererebbe un elevato 
+    # Round-Trip Time (RTT) per ogni chunk causando Latenza Cumulativa e potenziale Incoerenza Temporale,
+    # prepariamo i dati per un approccio Batch. Normalizziamo l'input in una struttura list[dict].
+    if isinstance(request.text, list):
+        # Mantiene la struttura a chunk (es. output da Whisper)
+        chunks_to_process = request.text
+    else:
+        # Se riceve una stringa singola, crea un chunk sintetico (Wrapper Pattern) per l'elaborazione standardizzata
+        chunks_to_process = [{"text": request.text}]
 
+    # [PATTERN: Batch Orchestration / Unified Bulk Call]
+    # Passando al paradigma Batch Orchestration, facciamo un'unica chiamata "bulk" verso il modulo traduttore.
+    # Questo sposta la responsabilità della gestione del contesto interamente sull'Agente, azzerando
+    # la latenza di rete ripetuta e lasciando questo Orchestratore main.py snello e rapido.
+    translated_results = translator.translate(chunks_to_process)
+    
+    # [PATTERN: Response Hydration & Data Reassembly]
+    # Ricevuti i risultati, riassembliamo la struttura dati originaria iniettando il testo tradotto.
+    # Manteniamo intatti i metadati dei segmenti originali (es. timestamp di inizio/fine).
+    if isinstance(request.text, list):
+        translated_chunks = []
+        # Zip accoppia in O(n) i chunk vecchi con i nuovi testi, garantito dal mantenimento dell'ordinamento topologico
+        for original_chunk, new_text in zip(request.text, translated_results):
+            new_chunk = original_chunk.copy()
+            new_chunk["text"] = new_text
+            translated_chunks.append(new_chunk)
+            
+        # Ritorna il payload ricostruito rispettando il contratto API verso il middleware (o frontend)
+        return {"original_text": request.text, "translated_text": translated_chunks}
+    
+    # Unwrap del risultato se in origine era una singola stringa monolitica
+    return {"original_text": request.text, "translated_text": translated_results[0]}
 
 def process_dubbing_task(job_id: str, request: DubbingRequest):
     """

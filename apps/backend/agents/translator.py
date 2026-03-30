@@ -2,6 +2,8 @@ from agno.agent import Agent
 
 from agno.models.google import Gemini
 
+import re
+
 class TranslationAgent:
     """
     Agente responsabile della traduzione del testo.
@@ -43,55 +45,55 @@ class TranslationAgent:
             ]
         )
     
-    def translate(self, text: str):
+    def translate(self, chunks: list[dict]):
         """
-        Esegue la traduzione adattiva del chunk di testo.
-        
-        Riceve in input non solo il payload semantico (text) ma anche la metrica
-        temporale (duration_seconds) derivata dal trascriber upstream. Questo permette
-        di calcolare a runtime i vincoli geometrici (Constraint Prompting) necessari
-        per garantire l'isocronia ed evitare il time-stretching (effetto chipmunk) nel TTS.
+        Riceve l'intero array di segmenti audio estratti dal trascriber upstream.
+        Il metodo è predisposto per la serializzazione topologica, mappando ogni chunk 
+        a un indice univoco. Questo garantisce la Context Window globale all'LLM 
+        forzando il mantenimento dell'isocronia tramite Constraint Prompting.
 
         Args:
-            text (str): Il testo originale estratto (es. via Whisper).
-            duration_seconds (float): La durata in secondi del chunk audio originale. 
-                                      Se 0.0, l'isocronia viene considerata best-effort.
+            chunks (list[dict]): Lista di dizionari contenente il payload acustico estratto.
 
         Returns:
-            str: Il testo adattato e isocrono, pronto per il sub-system TTS.
+            str: Il copione globale tradotto e numerato per l'orchestrazione TTS.
+
         """
         try:
-
-            # [PATTERN: Dynamic Context Injection]
-            # Calcola la geometria della stringa di input a runtime (Proxy Isocronico).
-            # Inietta questi metadati in coda al payload testuale, fornendo all'LLM 
-            # il target numerico pre-calcolato su cui applicare i vincoli (Hard Constraints)
-            # definiti nelle system instructions, abbattendo il rischio di allucinazioni aritmetiche.
-            char_count = len(text)
-            min_chars = int(char_count * 0.9)
-            max_chars = int(char_count * 1.1)
+            # Compone un payload indicizzato riga per riga. 
+            # Inietta esplicitamente un ID per mappare l'output alle frasi tradotte ai rispettivi timestamp originali.
+            payload_lines = []
+            for i, chunk in enumerate(chunks):
+                original_text = chunk.get("text", "").strip()
+                if original_text:
+                    payload_lines.append(f"[{i}] {original_text}")
             
-            enriched_payload = (
-                f"{text}\n\n"
-                f"--- METADATI DI CONTROLLO ISOCRONIA ---\n"
-                f"Lunghezza originale: {char_count} caratteri.\n"
-                f"VINCOLO MATEMATICO: La tua risposta deve essere compresa tra {min_chars} e {max_chars} caratteri totali."
-            )
-
-            # Esegue la chiamata all'agente LLM passando il payload arricchito invece del testo grezzo
+            # Serializza la struttura da array a stringa per l'injection nel batch prompt
+            enriched_payload = "\n".join(payload_lines)
+            
+            # Esecuzione asincrona/sincrona della chiamata all'LLM (agente)
             response = self.agent.run(enriched_payload)
-
-            # Estrae la stringa utile (payload) dalla risposta dell'agente LLM
-            translated_text = response.content
+            raw_output = response.content
             
-            # Calcola le metriche di downstream per validare l'isocronia (Constraint Prompting)
-            out_len= len(translated_text)
-            delta = out_len - char_count
+            # Estrazione sicura tramite Regex: estrapola il pattern [ID] Testo.
+            # Serve a mitigare potenziali allucinazioni in cui l'LLM aggiunge testo spurio (verbosity pre/post generazione)
+            pattern = r"\[(\d+)\]\s*(.*)"
+            matches = re.findall(pattern, raw_output)
 
-            # Logging telemetrico a schermo per evidenziare eventuali fallimenti dei vincoli geometrici
-            print(f"[TELEMETRIA TRADUTTORE] In: {char_count} chars | Out: {out_len} chars | Delta: {delta} chars")
+            # Costruisce una mappa hash per un rapido lookup in O(1) in fase di ricostruzione vettoriale
+            translation_map = {int(idx): text.strip() for idx, text in matches}
+            
+            final_translations = []
+            # Scorre l'array originale garantendo il mantenimento dell'ordinamento topologico dei frammenti (chunk)
+            for i in range(len(chunks)):
+                # Strategia di Fallback (Graceful Degradation): se il modello perde un indice, 
+                # preferiamo iniettare la stringa grezza originale piuttosto che dereferenziare un indice mancante
+                # causando sfasamenti in downstream (sync audio/video scorretto)
+                translated_text = translation_map.get(i, chunks[i].get("text", ""))
+                final_translations.append(translated_text)
+                
+            return final_translations
 
-            return translated_text
         except Exception as e:
             # Gestione base degli errori: restituisce una stringa formattata con il dettaglio dell'eccezione
             return f"[ERRORE DI TRADUZIONE]: {str(e)}"

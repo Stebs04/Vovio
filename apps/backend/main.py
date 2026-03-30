@@ -87,34 +87,46 @@ async def transcribe_video(file: UploadFile = File(...)):
 @app.post("/api/translate")
 async def translate_text(request: TranslationRequest):
     """
-    Endpoint per tradurre il testo estratto dalla trascrizione.
-    Gestisce sia stringhe singole che liste di frammenti (chunks) provenienti da Whisper.
+    Endpoint di orchestrazione per la fase di traduzione (Data Flow: Trascrizione -> Traduzione -> Sintesi).
+    Il main.py funge da Orchestratore puro: non conosce i dettagli implementativi del traduttore, 
+    ma si occupa esclusivamente di smistare i dati (Decoupling della Pipeline).
     """
-    # Inizializza l'agente di traduzione con la lingua di destinazione richiesta
+    # Inizializza l'agente traduttore, limitandosi a passare i parametri di configurazione base.
     translator = TranslationAgent(target_language=request.target_language)
     
-    # Se il payload di input è una lista (tipico array di segmenti da Whisper)
+    # [PATTERN: Input Normalization]
+    # Invece di usare un'Iterazione Sequenziale Bloccante (ciclo for) che genererebbe un elevato 
+    # Round-Trip Time (RTT) per ogni chunk causando Latenza Cumulativa e potenziale Incoerenza Temporale,
+    # prepariamo i dati per un approccio Batch. Normalizziamo l'input in una struttura list[dict].
+    if isinstance(request.text, list):
+        # Mantiene la struttura a chunk (es. output da Whisper)
+        chunks_to_process = request.text
+    else:
+        # Se riceve una stringa singola, crea un chunk sintetico (Wrapper Pattern) per l'elaborazione standardizzata
+        chunks_to_process = [{"text": request.text}]
+
+    # [PATTERN: Batch Orchestration / Unified Bulk Call]
+    # Passando al paradigma Batch Orchestration, facciamo un'unica chiamata "bulk" verso il modulo traduttore.
+    # Questo sposta la responsabilità della gestione del contesto interamente sull'Agente, azzerando
+    # la latenza di rete ripetuta e lasciando questo Orchestratore main.py snello e rapido.
+    translated_results = translator.translate(chunks_to_process)
+    
+    # [PATTERN: Response Hydration & Data Reassembly]
+    # Ricevuti i risultati, riassembliamo la struttura dati originaria iniettando il testo tradotto.
+    # Manteniamo intatti i metadati dei segmenti originali (es. timestamp di inizio/fine).
     if isinstance(request.text, list):
         translated_chunks = []
-        for chunk in request.text:
-            # Verifica che il chunk sia un dizionario valido contenente la chiave "text"
-            if isinstance(chunk, dict) and "text" in chunk:
-                # Esegue la traduzione per il singolo frammento
-                adapted_text = translator.translate(chunk["text"])
-                
-                # Crea una copia del chunk originale per preservare i timestamp
-                translated_chunk = chunk.copy()
-                translated_chunk["text"] = adapted_text
-                
-                # Aggiunge il chunk tradotto alla lista finale
-                translated_chunks.append(translated_chunk)
-                
+        # Zip accoppia in O(n) i chunk vecchi con i nuovi testi, garantito dal mantenimento dell'ordinamento topologico
+        for original_chunk, new_text in zip(request.text, translated_results):
+            new_chunk = original_chunk.copy()
+            new_chunk["text"] = new_text
+            translated_chunks.append(new_chunk)
+            
+        # Ritorna il payload ricostruito rispettando il contratto API verso il middleware (o frontend)
         return {"original_text": request.text, "translated_text": translated_chunks}
     
-    else:
-        # Fallback per payload composti da una singola stringa grezza
-        translated_text = translator.translate(request.text, duration_second=0.0)
-        return {"original_text": request.text, "translated_text": translated_text}
+    # Unwrap del risultato se in origine era una singola stringa monolitica
+    return {"original_text": request.text, "translated_text": translated_results[0]}
 
 def process_dubbing_task(job_id: str, request: DubbingRequest):
     """

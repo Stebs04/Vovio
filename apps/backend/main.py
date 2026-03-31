@@ -2,6 +2,7 @@
 import json
 from pathlib import Path
 from uuid import uuid4
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, UploadFile, File, HTTPException, BackgroundTasks, status
 from fastapi.responses import FileResponse
@@ -17,11 +18,6 @@ from agents.synthesizer import SynthesizerAgent
 # Store in-memory per tracciare lo stato dei job asincroni
 job_store = {}
 
-app = FastAPI(
-    title="Vovio Backend",
-    description="API per trascrizione, traduzione e doppiaggio automatizzato di video.",
-    version="0.1.0"
-)
 
 # Configura i CORS per permettere le chiamate dal frontend locale
 app.add_middleware(
@@ -32,9 +28,34 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Inizializza gli agenti all'avvio per minimizzare la latenza delle richieste successive
-transcriber_agent = TranscriptionAgent()
-synthesizer_agent = SynthesizerAgent()
+# Dizionario globale che conterrà i nostri agenti AI caricati
+agents = {}
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Questo codice viene eseguito PRIMA che il server accetti richieste, 
+    # ma DOPO aver aperto il processo, permettendoci di vedere i log!
+    print("⏳ Avvio caricamento modelli AI in corso (potrebbe richiedere alcuni minuti)...")
+    
+    # Inizializza gli agenti qui
+    agents["transcriber"] = TranscriptionAgent()
+    agents["synthesizer"] = SynthesizerAgent()
+    
+    print("✅ Modelli AI caricati correttamente. Server pronto per ricevere richieste!")
+    
+    yield # Qui il server FastAPI inizia a rispondere alle richieste HTTP
+    
+    # Questo blocco viene eseguito quando spegni il server (CTRL+C)
+    print("🛑 Spegnimento server. Rilascio modelli dalla memoria...")
+    agents.clear()
+
+
+app = FastAPI(
+    title="Vovio Backend",
+    description="API per trascrizione, traduzione e doppiaggio automatizzato di video.",
+    version="0.1.0",
+    lifespan=lifespan # <--- IMPORTANTE: Colleghiamo la funzione all'app
+)
 
 
 class TranslationRequest(BaseModel):
@@ -79,7 +100,7 @@ async def transcribe_video(file: UploadFile = File(...)):
 
     # Estrae l'audio e avvia la trascrizione
     audio_path = extract_audio(str(video_path))
-    transcription_data = transcriber_agent.transcribe(str(audio_path))
+    transcription_data = agents["transcriber"].transcribe(str(audio_path))
 
     return {"filename": file.filename, "transcription": transcription_data}
 
@@ -163,7 +184,7 @@ def process_dubbing_task(job_id: str, request: DubbingRequest):
             pass
 
         # Genera il nuovo stream audio
-        dubbed_audio_path = synthesizer_agent.generate_audio(
+        dubbed_audio_path = agents["synthesizer"].generate_audio(
             text=text_to_speak,
             target_language=request.target_language,
             reference_audio_path=str(reference_audio_path),

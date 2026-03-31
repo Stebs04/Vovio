@@ -21,7 +21,7 @@ REM [PROVISIONING: Virtual Environment Isolation]
         py -3.12 -m venv venv
     )
     call venv\Scripts\activate.bat
-    python -m pip install --upgrade pip setuptools wheel
+    python -m pip install --upgrade pip "setuptools<82" wheel
 
     REM [PROVISIONING: Environment-Aware Dependency Injection]
     REM Risoluzione dinamica dei binari tensoriali pesanti. Evita l'Hardware Lock-in
@@ -40,7 +40,7 @@ REM [PROVISIONING: Virtual Environment Isolation]
     echo [Bootstrap] Sincronizzazione dipendenze da requirements.txt...
     pip install -r requirements.txt
 REM Lancia Uvicorn. Il comando 'start /B' avvia il processo in background nella stessa finestra.
-start /B uvicorn main:app --reload --port 8000
+start "Vovio Backend" cmd /c "uvicorn main:app --reload --port 8000"
 cd ..\..
 
 REM [DevX] Bootstrap del Frontend (Next.js).

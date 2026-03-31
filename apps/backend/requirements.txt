@@ -1,6 +1,5 @@
 # Core Web Framework
-fastapi
-uvicorn
+fastapi[standard]
 python-multipart
 python-dotenv
 pydantic
@@ -21,3 +20,5 @@ google-genai
 moviepy
 coqui-tts
 ffmpeg-python
+
+hf_xet

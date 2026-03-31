@@ -18,9 +18,10 @@ REM [PROVISIONING: Virtual Environment Isolation]
     REM Verifica l'esistenza del venv. Se assente, lo crea ex-novo per isolare le dipendenze.
     IF NOT EXIST venv (
         echo [Bootstrap] Creazione Virtual Environment per il Backend...
-        python -m venv venv
+        py -3.12 -m venv venv
     )
     call venv\Scripts\activate.bat
+    python -m pip install --upgrade pip setuptools wheel
 
     REM [PROVISIONING: Environment-Aware Dependency Injection]
     REM Risoluzione dinamica dei binari tensoriali pesanti. Evita l'Hardware Lock-in

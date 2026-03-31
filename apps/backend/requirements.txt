@@ -3,6 +3,7 @@ fastapi
 uvicorn
 python-multipart
 python-dotenv
+pydantic
 
 # AI Foundation (The "Brain")
 torch
@@ -19,3 +20,4 @@ google-genai
 # Multimedia Processing
 moviepy
 coqui-tts
+ffmpeg-python

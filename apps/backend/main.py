@@ -10,6 +10,7 @@ from pathlib import Path
 from uuid import uuid4
 from contextlib import asynccontextmanager
 import time
+import torch
 
 from fastapi import FastAPI, UploadFile, File, HTTPException, BackgroundTasks, status
 from fastapi.responses import FileResponse
@@ -38,6 +39,7 @@ async def lifespan(app: FastAPI):
     garantendo che l'API sia reattiva fin dalla prima richiesta (warm-start).
     """
     print("⏳ Avvio istanziazione dei modelli AI in corso (operazione memory-intensive, attendere)...")
+    print(f"🔧 Accelerazione Hardware (CUDA) rilevata: {torch.cuda.is_available()}")
     
     # Inizializzazione e allocazione degli agenti AI nel registry globale
     agents["transcriber"] = TranscriptionAgent()

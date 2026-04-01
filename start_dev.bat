@@ -18,20 +18,20 @@ REM [PROVISIONING: Virtual Environment Isolation]
     REM Verifica l'esistenza del venv. Se assente, lo crea ex-novo per isolare le dipendenze.
     IF NOT EXIST venv (
         echo [Bootstrap] Creazione Virtual Environment per il Backend...
-        py -3.12 -m venv venv
+        py -3.11 -m venv venv
     )
     call venv\Scripts\activate.bat
-    python -m pip install --upgrade pip setuptools wheel
+    python -m pip install --upgrade pip "setuptools<82" wheel
 
     REM [PROVISIONING: Environment-Aware Dependency Injection]
     REM Risoluzione dinamica dei binari tensoriali pesanti. Evita l'Hardware Lock-in
     REM scaricando la build ottimizzata per CPU o GPU in base alla configurazione locale.
-    IF "%USE_CUDA%"=="1" (
+   IF "%USE_CUDA%"=="1" (
         echo [Bootstrap] Hardware Target: GPU. Installazione PyTorch CUDA...
-        pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
+        pip install torch==2.5.1 torchvision==0.20.1 torchaudio==2.5.1 --index-url https://download.pytorch.org/whl/cu121
     ) ELSE (
         echo [Bootstrap] Hardware Target: CPU. Installazione PyTorch CPU...
-        pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
+        pip install torch==2.5.1 torchvision==0.20.1 torchaudio==2.5.1 --index-url https://download.pytorch.org/whl/cpu
     )
 
     REM [PROVISIONING: Dependency Syncing]
@@ -40,7 +40,7 @@ REM [PROVISIONING: Virtual Environment Isolation]
     echo [Bootstrap] Sincronizzazione dipendenze da requirements.txt...
     pip install -r requirements.txt
 REM Lancia Uvicorn. Il comando 'start /B' avvia il processo in background nella stessa finestra.
-start /B uvicorn main:app --reload --port 8000
+start "Vovio Backend" cmd /c "uvicorn main:app --reload --port 8000"
 cd ..\..
 
 REM [DevX] Bootstrap del Frontend (Next.js).

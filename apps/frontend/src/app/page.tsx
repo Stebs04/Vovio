@@ -120,7 +120,7 @@ export default function VovioMainPage(){
                 Lingua di destinazione:
               </label>
 
-              <select id="languageSelect" value={targetLanguage} onChange={(e) => setTargetLanguage(e.target.value)} className='border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-purple-500 outline-none bg-white'>
+              <select id="languageSelect" value={targetLanguage} onChange={(e) => setTargetLanguage(e.target.value)} className='border border-gray-200 rounded-lg px-3 py-1.5 text-sm focus:ring-2 focus:ring-purple-500 outline-none bg-white text-gray-900'>
                 <option value="en">Inglese (EN)</option>
 
                 <option value="es">Spagnolo (ES)</option>
@@ -187,11 +187,18 @@ export default function VovioMainPage(){
 
             </div>
 
-            {/* Azione Contestuale: 
-                Trigger per l'esportazione Client-Side. 
-                Utilizza fallback su stringa vuota (|| "") per conformità rigorosa ai tipi TypeScript.
-            */}
-            <button onClick={() => downloadTextFile(state.transcription || "","trascrizione.txt")} className='mt-2 self-start px-4 py-2 bg-white border border-gray-300 text-sm font-medium text-gray-700 rounded-lg hover:bg-gray-50 transition-colors'>
+              {/* Azione Contestuale: 
+                  Trigger per l'esportazione Client-Side. 
+                  Aggiungiamo la serializzazione JSON per convertire l'Array di Oggetti in una stringa
+                  leggibile, evitando l'implicit cast a [object Object] da parte di JavaScript.
+              */}
+              <button 
+                onClick={() => downloadTextFile(
+                 JSON.stringify(state.transcription, null, 2) || "", 
+                  "trascrizione.txt"
+                )} 
+                className='mt-2 self-start px-4 py-2 bg-white border border-gray-300 text-sm font-medium text-gray-700 rounded-lg hover:bg-gray-50 transition-colors'
+              >
                 Scarica Trascrizione
               </button>
 

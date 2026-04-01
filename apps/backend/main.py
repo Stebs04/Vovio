@@ -9,6 +9,7 @@ import json
 from pathlib import Path
 from uuid import uuid4
 from contextlib import asynccontextmanager
+import time
 
 from fastapi import FastAPI, UploadFile, File, HTTPException, BackgroundTasks, status
 from fastapi.responses import FileResponse
@@ -221,7 +222,7 @@ def process_dubbing_task(job_id: str, request: DubbingRequest):
 
         # Genera un audio clonato (synthetic voice) appoggiandosi ai modelli TTS integrati
         dubbed_audio_path = agents["synthesizer"].generate_audio(
-            text=text_to_speak,
+            segments=parsed_data,
             target_language=request.target_language,
             reference_audio_path=str(reference_audio_path),
             progress_callback=update_progress
@@ -232,6 +233,8 @@ def process_dubbing_task(job_id: str, request: DubbingRequest):
         # Validazione strutturale esplicita per impedire il merge su un file audio non valido
         if dubbed_audio_path.startswith("[ERRORE"):
             raise ValueError(f"Fallimento riscontrato nel modulo TTS: {dubbed_audio_path}")
+        
+        time.sleep(3)
 
         # Costruisce il nome dell'artefatto video di destinazione (sink artifact)
         final_video_filename = f"final_{request.target_language}_{request.video_filename}"

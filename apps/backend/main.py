@@ -200,28 +200,22 @@ def process_dubbing_task(job_id: str, request: DubbingRequest):
         # Risoluzione predittiva dei percorsi sul file system temporaneo
         video_path = TEMP_DIR / request.video_filename
         
-        # Assume come traccia reference per il voice cloning l'audio raw estratto preliminarmente durante la trascrizione
+        # Assume come traccia reference per il voice cloning l'audio raw estratto preliminarmente
         reference_audio_path = TEMP_DIR / f"{Path(request.video_filename).stem}.wav"
         
-        text_to_speak = request.translated_text
-        
-        # Routing condizionale di formattazione del JSON in ingresso a beneficio del modulo TTS
+        # Routing e parsing del payload testuale
         try:
-            parsed_data = json.loads(text_to_speak) if isinstance(text_to_speak, str) else text_to_speak
-            if isinstance(parsed_data, list):
-                # Estrae le componenti testuali e scarta eventuali bounding-box estranei generati da moduli antecedenti
-                text_to_speak = " ".join([
-                    item.get("text", "") 
-                    for item in parsed_data 
-                    if isinstance(item, dict) and "text" in item
-                ])
+            # Trasformiamo la stringa in arrivo nella nostra lista di dizionari (list[dict])
+            parsed_data = json.loads(request.translated_text) if isinstance(request.translated_text, str) else request.translated_text
+            
+            # Abbiamo eliminato la logica distruttiva! Ora i timestamp sono salvi in 'parsed_data'.
         except Exception:
-            # Fallback generico per elaborare la cache bypassando il parser strict
-            pass
+            # Fallback di sicurezza in caso di JSON malformato
+            parsed_data = []
 
-        # Genera un audio clonato (synthetic voice) appoggiandosi ai modelli TTS integrati
+        # Genera un audio clonato appoggiandosi ai modelli TTS integrati
         dubbed_audio_path = agents["synthesizer"].generate_audio(
-            text=text_to_speak,
+            segments= parsed_data,
             target_language=request.target_language,
             reference_audio_path=str(reference_audio_path),
             progress_callback=update_progress

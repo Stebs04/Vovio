@@ -5,10 +5,10 @@ python-dotenv
 pydantic
 
 # AI Foundation (The "Brain")
-torch
-torchaudio
-torchcodec
+torch==2.5.1
+torchaudio==2.5.1
 transformers==4.44.2
+soundfile
 
 # Multi-Agent AI Engines
 faster-whisper
@@ -18,7 +18,7 @@ google-genai
 
 # Multimedia Processing
 moviepy
-coqui-tts
+TTS
 ffmpeg-python
 
 hf_xet

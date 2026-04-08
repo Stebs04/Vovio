@@ -108,88 +108,102 @@ class SynthesizerAgent:
                 
         # Restituisce l'array dei chunk testuali validati.
         return chunks
-
-
-    # Metodo per generare audio (nota: riceve `self` nella firma suggerendo che sia in origine parte di una classe).
+    
     def generate_audio(self, segments: list[dict], target_language: str, reference_audio_path: str, progress_callback=None):
-        # Entra nel blocco try-except principale per gestire l'intero workflow di generazione tutelandosi dagli errori runtime.
+        """
+        Sintetizza i frammenti vocali e li posiziona in modo assoluto su una timeline audio.
+        Implementa chunking testuale interno per evitare saturazione del modello TTS.
+        
+        Args:
+            segments (list[dict]): Array di payload testuali con i relativi timestamp (start/end).
+            target_language (str): Locale di destinazione (es. 'it', 'en').
+            reference_audio_path (str): Percorso del file audio target per il features cloning (speaker wav).
+            progress_callback (Callable): Hook opzionale per la notifica asincrona dello stato di avanzamento.
+            
+        Returns:
+            str: Il percorso assoluto su filesystem del file audio locale (WAV) generato, o stringa d'errore.
+        """
         try:
-            # Crea il nome del file di output basandosi sulla lingua target impostata (es. 'dubbed_it.wav').
+            # Determinazione del path temporaneo per il salvataggio della traccia vocale isolata.
             output_filename = f"dubbed_{target_language}.wav"
-            # Converte l'oggetto Path combinato col nome in una stringa di path assoluto per il salvataggio nella directory temporanea.
             output_path = str(TEMP_DIR / output_filename)
             
-            # Una lista per accumulare tutti i singoli tensori audio derivati dalla sintesi graduale.
-            audio_tensors = []
-            # Definizione della frequenza di campionamento (Sample Rate) specifica e fissa dell'architettura del modello XTTS_v2.
+            # Frequenza fissa di campionamento richiesta dai tensori in output del modello XTTS_v2.
             SAMPLE_RATE = 24000 
-            # Inizializza il contatore del tempo (in secondi) relativo a tutto l'audio sintetizzato finora, per gestire il timing dei segmenti.
-            current_time = 0.0  
             
-            # Ciclo iterativo tramite tutti i segmenti vocali forniti in input; ciascuno possiede il suo testo e dei trigger temporali.
+            # Buffer tridimensionale (start, end, tensor). Accumula the clip prima del mix-down finale sulla timeline.
+            generated_clips = []
+            
+            # High-water mark per stabilire l'ampiezza logica del canvas audio preallocato (in campioni).
+            max_sample_needed = 0
+            
             for i, segment in enumerate(segments):
-                # Se è stata fornita una funzione di callback (utile spesso per le progress bar in UI)...
+                # Dispatch dell'evento di status per tracciare il batch upstream sull'interfaccia.
                 if progress_callback:
-                    # ...calcola la percentuale del progresso in base all'iterazione.
                     current_pct = int((i / len(segments)) * 100)
-                    # Invoca la callback passando la nuova % e una flag "synthesizing".
                     progress_callback(current_pct, "synthesizing")
                 
-                # Estrae il chunk testuale dal segmento proteggendosi da chiavi inesistenti grazie al fallback `get` ('').
                 text_chunk = segment.get('text', '')
-                # Estrae il timecode iniziale in secondi in cui l'audio dovrebbe innestarsi rispetto all'inizio del file media generale.
                 start_time = segment.get('start', 0.0)
                 
-                # Se la stringa testuale dovesse farsi trovare vuota (o di soli spazi), bypassa la sintesi saltando alla successiva.
+                # Pruning logico veloce per bypassare frammenti puramente silenziosi o parsati a vuoto.
                 if not text_chunk.strip(): 
                     continue
                 
-                # Se la durata d'audio generata finora è in ritardo rispetto al momento in cui dovrebbe partire questo nuovo segmento audio...
-                if current_time < start_time:
-                    # ...determina in secondi quanto 'silenzio' bisogna inserire per sincronizzare la timeline audio locale rispetto allo start.
-                    duration_seconds = (start_time - current_time)
+                # Split testuale preventivo (chunking). XTTS degrada le performances con testi stringenti 
+                # causando instabilità fonetiche a causa del collasso della attention window.
+                sub_chunks = self._chunk_text(text_chunk, max_chars=200)
+                
+                # Mappatura del punto di offset: dal dominio del tempo (secondi) al dominio del campione (discreto).
+                current_start_sample = int(start_time * SAMPLE_RATE)
+                
+                for sub_text in sub_chunks:
+                    # Invocazione zero-shot text-to-speech per l'approssimazione vocale (cloning) del blocco.
+                    wav_array = self.tts.tts(
+                        text=sub_text, 
+                        speaker_wav=reference_audio_path, 
+                        language=target_language
+                    )
                     
-                    # Moltiplicando la durata per il sample rate otteniamo l'esatto ammontare in sample rate di cui abbiamo bisogno.
-                    samples = int(duration_seconds * SAMPLE_RATE)
-                
-                    # Viene instanziato un vuoto tensore tramite `zeros` in PyTorch corrispondente proprio a un rumore pari allo step zero (silenzio).
-                    samples_number = torch.zeros(samples)
-                
-                    # Si concatena poi il ritardo alla lista dei futuri tensori.
-                    audio_tensors.append(samples_number)
+                    # Type casting: converte l'array C-style di numpy in un tensore ottimizzato residente su PyTorch.
+                    wav_tensor = torch.tensor(wav_array)
+                    
+                    # Definisce l'indiciatore iterativo di fine-lettura per il layer di buffer di base al clipping appena istanziato.
+                    end_sample = current_start_sample + len(wav_tensor)
+                    
+                    generated_clips.append((current_start_sample, end_sample, wav_tensor))
+                    
+                    # Tracking dinamico del frame totale più elevato (resize indiretto della timeline container).
+                    if end_sample > max_sample_needed:
+                        max_sample_needed = end_sample
+                        
+                    # Shift dell'offset puntatore per interpolare sub-paragrafi contigui (nella medesima battuta).
+                    current_start_sample = end_sample
             
-                    # Si allinea il timer cronologico per fare matching con il tempo di partenza dello speech attuale.
-                    current_time = start_time
-                # -----------------------------------------------
-                
-                # Chiamata centrale all'engine del modello XTTS_v2 che gestisce la pronuncia. Parametri: test chunk pulito, clone-audio ref, idioma targe.
-                wav_array = self.tts.tts(
-                    text=text_chunk, 
-                    speaker_wav=reference_audio_path, 
-                    language=target_language
-                )
-                
-                # Il ritorno array va avvolto in un tipo compatibile Tensore per renderlo pronto per le operazioni successive colme di librerie dedicate PyTorch.
-                wav_tensor = torch.tensor(wav_array)
-                # Si accoda la traccia prodotta e codificata via Tensore al pool.
-                audio_tensors.append(wav_tensor)
-                
-                # Si aggiorna il cronometro virtuale interno aumentando lo stesso del tempo in secondi per cui canta il motore: `numero vettori` fratto `SR`.
-                current_time += len(wav_tensor) / SAMPLE_RATE
-            
-            # Dopo terminato il looping, se per puro asincrono le stringhe fossero andate perse nel flusso lasciando tensori assenti, cattură.
-            if not audio_tensors:
-                # Emette una voluta eccezione (poi rigettata al catcher locale) intercettando stati inattesi a valle per impedire output corrotti.
+            # Guard-clause estrema avverso allocazioni hardware erranti (vettori zero size).
+            if not generated_clips:
                 raise ValueError("Nessun segmento valido da sintetizzare.")
                 
-            # Il vero rendering che incolla i vettori di speech unendoli nel medesimo layer tensoriale tramite uncat lungo la matrice principale zero-dimension.
-            final_audio = torch.cat(audio_tensors).unsqueeze(0)
-            # Salva attraverso modulo dedicato torchaudio. Inseriamo la forma file `.wav` nel target designato avvalendoci della Rate prefissata originale del modello testuale.
+            # Preallocazione hard-memory del master mix buffer ("canvas") con silence padding omogeneo.
+            final_audio = torch.zeros(max_sample_needed)
+            
+            # Mux in-memory vettoriale: posiziona per slicing e sovrappone aritmeticamente tutti i clip sul target sample rate.
+            for start_sample, end_sample, wav_tensor in generated_clips:
+                final_audio[start_sample:end_sample] += wav_tensor
+            
+            # Gain staging and Mastering (Peak Normalization limit). Assicura il fall-off anti distorsione / alias 
+            # nel denaturare clipping dovuti a somma di segnali su frames paralleli.
+            if final_audio.max() > 1.0 or final_audio.min() < -1.0:
+                final_audio = final_audio / max(final_audio.max(), abs(final_audio.min()))
+                
+            # Aggiunta di asse fittizio per rispettare la signature del decoder torchaudio (Channel augmentation).
+            final_audio = final_audio.unsqueeze(0)
+            
+            # Flushing persistente del buffer su disco locale come RIFF PCM (.WAV).
             torchaudio.save(output_path, final_audio, SAMPLE_RATE)
             
-            # Una volta concesso file path concesso su file system in I/O positivo al termine elaborazione viene renderne in exit il medesimo Path locale in String.
             return output_path
             
-        # Catchem all per raccogliere qualsiasi imprevisto esitante l'ambiente in locale, utile per evitare crash interi della pipeline e segnalarle agilmenete sull'upper layer API.
         except Exception as e:
+            # Trap graceful per far rimbalzare eccezioni non gestite direttamente su middleware o UI.
             return f"[ERRORE DI SINTESI VOCALE]: {str(e)}"

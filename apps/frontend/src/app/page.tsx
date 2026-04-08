@@ -82,6 +82,7 @@ export default function VovioMainPage() {
           src="/logo.png" 
           alt="Vovio Logo" 
           fill 
+          sizes="40px"
           className="rounded-xl object-contain"
           priority 
         />

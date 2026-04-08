@@ -19,6 +19,57 @@ export default function VovioMainPage() {
     link.click();
     URL.revokeObjectURL(url);
   };
+    
+  const formatSrtTime = (seconds: number | null): string => {
+    if (seconds === null || seconds === undefined || isNaN(seconds)) return "00:00:00,000";
+    
+    const date = new Date(seconds * 1000);
+    const hh = String(Math.floor(seconds / 3600)).padStart(2, '0');
+    const mm = String(date.getUTCMinutes()).padStart(2, '0');
+    const ss = String(date.getUTCSeconds()).padStart(2, '0');
+    const ms = String(date.getUTCMilliseconds()).padStart(3, '0');
+    return `${hh}:${mm}:${ss},${ms}`;
+  };
+
+  // Converte l'array JSON di Whisper in una stringa .srt formattata
+  const jsonToSrt = (data: any): string => {
+    if (!data) return "";
+    
+    // Se per qualche motivo è una stringa piana, fai un fallback base
+    if (typeof data === "string") {
+      return `1\n00:00:00,000 --> 00:00:05,000\n${data}\n`;
+    }
+
+    if (Array.isArray(data)) {
+      let srtOutput = "";
+      
+      data.forEach((chunk, index) => {
+        let startStr = "00:00:00,000";
+        let endStr = "00:00:05,000";
+
+        // Mappatura per il formato di output di default di Whisper (timestamp come array/tupla)
+        if (Array.isArray(chunk.timestamp) && chunk.timestamp.length === 2) {
+          startStr = formatSrtTime(chunk.timestamp[0]);
+          endStr = formatSrtTime(chunk.timestamp[1]);
+        } 
+        // Fallback per altri formati ASR che usano chiavi start/end dirette
+        else if (chunk.start !== undefined && chunk.end !== undefined) {
+          startStr = formatSrtTime(chunk.start);
+          endStr = formatSrtTime(chunk.end);
+        }
+
+        srtOutput += `${index + 1}\n`;
+        srtOutput += `${startStr} --> ${endStr}\n`;
+        srtOutput += `${chunk.text ? chunk.text.trim() : ""}\n\n`;
+      });
+
+      return srtOutput.trim();
+    }
+
+    return "";
+  };
+
+
 
   return (
     <div className="flex h-screen overflow-hidden bg-[#f7f9fb] text-slate-900">
@@ -155,14 +206,14 @@ export default function VovioMainPage() {
               <div className="flex justify-between items-center px-2">
                 <h3 className="font-bold flex items-center gap-2">
                   <span className="material-symbols-outlined text-slate-400">code</span>
-                  Trascrizione (JSON)
+                  Trascrizione (SRT)
                 </h3>
                 {state.transcription && (
                   <button 
-                    onClick={() => downloadTextFile(JSON.stringify(state.transcription, null, 2), "originale.json")}
+                    onClick={() => downloadTextFile(jsonToSrt(state.transcription), "trascrizione.srt")}
                     className="text-xs font-bold text-blue-600 hover:underline flex items-center gap-1"
                   >
-                    <span className="material-symbols-outlined text-sm">download</span> Scarica
+                    <span className="material-symbols-outlined text-sm">download</span> Scarica .srt
                   </button>
                 )}
               </div>
@@ -180,14 +231,14 @@ export default function VovioMainPage() {
               <div className="flex justify-between items-center px-2">
                 <h3 className="font-bold flex items-center gap-2">
                   <span className="material-symbols-outlined text-purple-600">language</span>
-                  Traduzione (JSON)
+                  Traduzione (SRT)
                 </h3>
                 {state.translation && (
                   <button 
-                    onClick={() => downloadTextFile(JSON.stringify(state.translation, null, 2), "tradotto.json")}
+                    onClick={() => downloadTextFile(jsonToSrt(state.translation), `traduzione_${targetLanguage}.srt`)}
                     className="text-xs font-bold text-purple-600 hover:underline flex items-center gap-1"
                   >
-                    <span className="material-symbols-outlined text-sm">download</span> Scarica
+                    <span className="material-symbols-outlined text-sm">download</span> Scarica .srt
                   </button>
                 )}
               </div>

@@ -17,8 +17,20 @@ class TranslationAgent:
             target_language (str): Codice della lingua di destinazione (default: "eng").
             model_id (str): Identificativo del modello OpenAI da utilizzare (default: "gpt-4o-mini").
         """
+        # Mappatura esplicita per aiutare l'LLM a capire le sigle del frontend
+        language_map = {
+            "en": "Inglese",
+            "es": "Spagnolo",
+            "fr": "Francese",
+            "de": "Tedesco",
+            "eng": "Inglese"
+        }
+        
+       # Se la sigla è conosciuta la traduce estesa, altrimenti usa quella passata
+        explicit_language = language_map.get(target_language.lower(), target_language)
+        
         # Salva la lingua di destinazione per riferimento futuro
-        self.target_language = target_language
+        self.target_language = explicit_language
         
         # Inizializza l'agente Agno con il modello Gemini specificato
         # Questo agente gestirà le richieste di traduzione effettive

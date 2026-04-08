@@ -224,7 +224,10 @@ export default function VovioMainPage() {
                         <p className="text-xs text-slate-500">Video generato con successo</p>
                       </div>
                     </div>
+                 {/* ... (codice precedente con l'icona check_circle) ... */}
                   </div>
+                  
+                  {/* Bottone di Download Esistente */}
                   <a 
                     href={state.finalVideoUrl} 
                     download 
@@ -233,6 +236,13 @@ export default function VovioMainPage() {
                     <span className="material-symbols-outlined">download</span>
                     Scarica Video Finale
                   </a>
+                  
+                  {/* INIZIO - NUOVA RIGA DA AGGIUNGERE */}
+                  <p className="text-[10px] text-center text-slate-400 font-medium">
+                    Dimensione stimata: {selectedFile ? (selectedFile.size / (1024 * 1024)).toFixed(1) : "1.4"} MB • Tempo stimato: ~2m
+                  </p>
+                  {/* FINE - NUOVA RIGA DA AGGIUNGERE */}
+
                 </div>
               </div>
             </section>

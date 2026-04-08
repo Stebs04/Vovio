@@ -243,6 +243,18 @@ def process_dubbing_task(job_id: str, request: DubbingRequest):
             output_path=str(final_video_path)
         )
         
+        #PULIZIA FILE INTERMEDI
+        # Usa il metodo .unlink() di pathlib che elimina il file dal disco.
+        # missing_ok=True evita crash se il file per qualche motivo non c'è.
+
+        try:
+            video_path.unlink(missing_ok=True)
+            reference_audio_path.unlink(missing_ok=True)
+            Path(dubbed_audio_path).unlink(missing_ok=True)
+            print("✅ File intermedi (originali e tracce separate) eliminati con successo.")
+        except Exception as cleanup_error:
+            print(f"⚠️ Impossibile eliminare i file intermedi: {cleanup_error}")
+
         # Consolida e conclude il tracing del job nello store in-memory in caso di run immacolata
         job_store[job_id].update({
             "status": "completed",
@@ -286,12 +298,25 @@ async def generate_dubbing(request: DubbingRequest, background_tasks: Background
 
 
 @app.get("/api/download/{filename}")
-async def download_file(filename: str):
+async def download_file(filename: str, background_tasks: BackgroundTasks):
     """
     Meccanismo di streaming e payload byte-serving per recuperare i media generati.
     I FileResponse FastAPI evitano memory leak serializzando gradualmente blocchi binari al consumer HTTP.
     """
     file_path = TEMP_DIR / filename
+
+    # Funzione di utilità per rimuovere il file a posteriori
+    def remove_file_after_download(path_to_remove: Path):
+        try:
+            path_to_remove.unlink(missing_ok=True)
+            print(f"🗑️ File finale rimosso con successo dopo il download: {path_to_remove.name}")
+        except Exception as e:
+            print(f"⚠️ Errore durante la rimozione del file {path_to_remove.name}: {e}")
+
+    # PROGRAMMA LA PULIZIA
+    # FastAPI eseguirà questa funzione in automatico SOLO DOPO che il FileResponse
+    # avrà terminato di inviare l'ultimo byte al browser dell'utente.
+    background_tasks.add_task(remove_file_after_download, file_path)
 
     return FileResponse(
         path=str(file_path),

@@ -41,9 +41,9 @@ class SynthesizerAgent:
         # Imposta la variabile d'ambiente per accettare automaticamente i "Terms of Service" di Coqui ed evitare prompt bloccanti a terminale.
         os.environ["COQUI_TOS_AGREED"] = "1"  
         
-        # Gestione dell'accelerazione hardware: legge l'intenzione di usare CUDA dalle variabili d'ambiente.
-        use_cuda_env = os.environ.get("USE_CUDA", "false").lower() == "true"
-        # Verifica se l'uso di CUDA è stato richiesto e se la GPU è effettivamente disponibile sul sistema.
+       # Gestione dell'accelerazione hardware
+        cuda_val = os.environ.get("USE_CUDA", "0").lower()
+        use_cuda_env = cuda_val in ["1", "true", "t", "yes"]
         use_gpu = use_cuda_env and torch.cuda.is_available()
         
         # Se era stata richiesta CUDA ma non è disponibile, avvisa l'utente tramite standard output.

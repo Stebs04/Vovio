@@ -9,6 +9,8 @@ import json
 from pathlib import Path
 from uuid import uuid4
 from contextlib import asynccontextmanager
+import time
+import torch
 
 from fastapi import FastAPI, UploadFile, File, HTTPException, BackgroundTasks, status
 from fastapi.responses import FileResponse
@@ -37,6 +39,7 @@ async def lifespan(app: FastAPI):
     garantendo che l'API sia reattiva fin dalla prima richiesta (warm-start).
     """
     print("⏳ Avvio istanziazione dei modelli AI in corso (operazione memory-intensive, attendere)...")
+    print(f"🔧 Accelerazione Hardware (CUDA) rilevata: {torch.cuda.is_available()}")
     
     # Inizializzazione e allocazione degli agenti AI nel registry globale
     agents["transcriber"] = TranscriptionAgent()
@@ -215,7 +218,7 @@ def process_dubbing_task(job_id: str, request: DubbingRequest):
 
         # Genera un audio clonato appoggiandosi ai modelli TTS integrati
         dubbed_audio_path = agents["synthesizer"].generate_audio(
-            segments= parsed_data,
+            segments=parsed_data,
             target_language=request.target_language,
             reference_audio_path=str(reference_audio_path),
             progress_callback=update_progress
@@ -226,6 +229,8 @@ def process_dubbing_task(job_id: str, request: DubbingRequest):
         # Validazione strutturale esplicita per impedire il merge su un file audio non valido
         if dubbed_audio_path.startswith("[ERRORE"):
             raise ValueError(f"Fallimento riscontrato nel modulo TTS: {dubbed_audio_path}")
+        
+        time.sleep(3)
 
         # Costruisce il nome dell'artefatto video di destinazione (sink artifact)
         final_video_filename = f"final_{request.target_language}_{request.video_filename}"

@@ -155,6 +155,8 @@ export const useVovioPipeline = () => {
         setState({
             ...state,
             currentStep: 'DUBBING',
+            dubbingProgress: 0,
+            dubbingStage: null,
             error: null
         });
 

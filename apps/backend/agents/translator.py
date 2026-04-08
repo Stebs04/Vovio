@@ -74,10 +74,11 @@ class TranslationAgent:
             # Esecuzione asincrona/sincrona della chiamata all'LLM (agente)
             response = self.agent.run(enriched_payload)
             raw_output = response.content
+            print(f"--- RAW LLM OUTPUT ---\n{raw_output}\n----------------------")
             
             # Estrazione sicura tramite Regex: estrapola il pattern [ID] Testo.
             # Serve a mitigare potenziali allucinazioni in cui l'LLM aggiunge testo spurio (verbosity pre/post generazione)
-            pattern = r"\[(\d+)\]\s*(.*)"
+            pattern = r"(?:\[)?(\d+)(?:\]|\.|:)?\s*(.*)"
             matches = re.findall(pattern, raw_output)
 
             # Costruisce una mappa hash per un rapido lookup in O(1) in fase di ricostruzione vettoriale

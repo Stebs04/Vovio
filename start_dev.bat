@@ -26,7 +26,10 @@ REM [PROVISIONING: Virtual Environment Isolation]
     REM [PROVISIONING: Environment-Aware Dependency Injection]
     REM Risoluzione dinamica dei binari tensoriali pesanti. Evita l'Hardware Lock-in
     REM scaricando la build ottimizzata per CPU o GPU in base alla configurazione locale.
-   IF "%USE_CUDA%"=="1" (
+    IF "%USE_CUDA%"=="1" (
+        echo [Bootstrap] Hardware Target: GPU. Installazione PyTorch CUDA...
+        pip install torch==2.5.1 torchvision==0.20.1 torchaudio==2.5.1 --index-url https://download.pytorch.org/whl/cu121
+    ) ELSE IF /I "%USE_CUDA%"=="true" (
         echo [Bootstrap] Hardware Target: GPU. Installazione PyTorch CUDA...
         pip install torch==2.5.1 torchvision==0.20.1 torchaudio==2.5.1 --index-url https://download.pytorch.org/whl/cu121
     ) ELSE (

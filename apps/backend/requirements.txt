@@ -13,8 +13,7 @@ soundfile
 # Multi-Agent AI Engines
 faster-whisper
 agno
-google-generativeai
-google-genai
+groq
 
 # Multimedia Processing
 moviepy

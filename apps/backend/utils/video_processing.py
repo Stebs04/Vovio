@@ -31,36 +31,37 @@ def extract_audio(video_path: str) -> Path:
 
 def merge_audio_video(video_path: str, audio_path: str, output_path: str) -> str:
     """
-    Combina un flusso video esistente con una nuova traccia audio (Muxing).
-    
-    Args:
-        video_path (str): Video sorgente originale.
-        audio_path (str): Nuova traccia audio da iniettare.
-        output_path (str): Percorso finale dove salvare il risultato.
-
-    Returns:
-        str: Il path del file di output.
+    Combina un flusso video esistente con una nuova traccia audio (operazione di Muxing).
+    Sovrascrive l'audio originale con quello fornito, garantendo la compatibilità
+    temporale e gestendo in sicurezza la deallocazione delle risorse in memoria.
     """
-    # Caricamento del video e della nuova traccia audio in memoria
+    # Inizializza i decoder di MoviePy per avvolgere i flussi multimediali
     video_clip = VideoFileClip(video_path)
     audio_clip = AudioFileClip(audio_path)
     
     try:
-        # Imposta la nuova traccia audio, sostituendo quella originale se presente
+        # Hard-clipping di sicurezza: se l'audio sintetizzato supera la durata del 
+        # video originale, taglia l'eccedenza. Questo evita l'allungamento della 
+        # timeline finale con conseguenti frame video "congelati" (neri o statici).
+        if audio_clip.duration > video_clip.duration:
+            audio_clip = audio_clip.subclip(0, video_clip.duration)
+            
+        # Inietta la nuova traccia audio nel container video (sostituendo la precedente)
         final_video = video_clip.with_audio(audio_clip)
         
-        # Scrive il video su disco usando codec standard per compatibilità (H.264 + AAC)
+        # Esegue il rendering finale su disco.
+        # Utilizza H.264 per il video e AAC per l'audio per garantire massima compatibilità (Web/Mobile).
+        # Il logger è disabilitato per ridurre il blocco di I/O sulla console durante il processo.
         final_video.write_videofile(
             output_path, 
             codec="libx264", 
             audio_codec="aac",
-            logger=None  # Riduce il rumore nei log se non necessario
+            logger=None  
         )
     finally:
-        # Best Practice: Chiudere esplicitamente le clip per rilasciare i lock sui file
+        # Cleanup critico: forza il rilascio dei file handle e dei subprocessi FFmpeg allocati.
+        # Il blocco finally garantisce che non ci siano memory leak anche in caso di eccezioni d'encoding.
         video_clip.close()
         audio_clip.close()
         
     return output_path
-
-    

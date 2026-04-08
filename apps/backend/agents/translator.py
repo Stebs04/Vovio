@@ -1,23 +1,30 @@
 from agno.agent import Agent
+from agno.models.groq import Groq
+from pydantic import BaseModel, Field
+import json
 
-from agno.models.google import Gemini
+# Pattern Architetturale: Data Transfer Object (DTO) via Pydantic.
+# Sfruttiamo i modelli formali per vincolare l'output dell'LLM a uno schema JSON deterministico.
+class TranslatedLine(BaseModel):
+    id: int = Field(description="L'ID numerico originale della riga (es. 0, 1, 2)")
+    # Pattern "Chain of Thought" (CoT) forzato a livello di schema:
+    # Richiedendo le note prima del testo, obblighiamo l'engine LLM a compiere un'analisi 
+    # di congruenza sillabica e metrica, aumentando l'accuratezza del lip-sync finale.
+    adaptation_notes: str = Field(description="Analisi tecnica dell'adattatore: stima delle sillabe (originale vs target), allineamento delle labiali (B, P, M) e vocali aperte, e motivazione delle scelte di adattamento non letterale.")
+    text: str = Field(description="La battuta finale adattata. Deve suonare naturale, parlata e perfetta per il lip-sync.")
 
-import re
+class DubbingScript(BaseModel):
+    # Struttura contenitore (Root Node) per l'array di segmenti elaborati.
+    lines: list[TranslatedLine] = Field(description="Lista di tutte le battute adattate")
 
 class TranslationAgent:
     """
-    Agente responsabile della traduzione del testo.
-    Utilizza un modello LLM per convertire il testo nella lingua di destinazione specificata.
+    Agente LLM specializzato nell'adattamento cine-televisivo.
+    Implementa logiche di Prompt Engineering avanzate (isocronia, restrizioni fonetiche)
+    e garantisce un output tipizzato avvalendosi del supporto nativo per JSON Schema di Groq.
     """
-    def __init__(self, target_language: str ="eng",  model_id: str="gemini-2.5-flash"):
-        """
-        Inizializza l'agente di traduzione.
-
-        Args:
-            target_language (str): Codice della lingua di destinazione (default: "eng").
-            model_id (str): Identificativo del modello OpenAI da utilizzare (default: "gpt-4o-mini").
-        """
-        # Mappatura esplicita per aiutare l'LLM a capire le sigle del frontend
+    def __init__(self, target_language: str = "eng", model_id: str = "llama-3.3-70b-versatile"):
+        # Normalizzazione del target linguistico per stabilizzare la deterministica del prompt.
         language_map = {
             "en": "Inglese",
             "es": "Spagnolo",
@@ -26,90 +33,87 @@ class TranslationAgent:
             "eng": "Inglese"
         }
         
-       # Se la sigla è conosciuta la traduce estesa, altrimenti usa quella passata
-        explicit_language = language_map.get(target_language.lower(), target_language)
+        self.target_language = language_map.get(target_language.lower(), target_language)
         
-        # Salva la lingua di destinazione per riferimento futuro
-        self.target_language = explicit_language
-        
-        # Inizializza l'agente Agno con il modello Gemini specificato
-        # Questo agente gestirà le richieste di traduzione effettive
-        # Configurazione dell'agente con istruzioni specifiche per il doppiaggio.
-        # Le istruzioni sono rigorose per garantire che l'output sia solo il testo tradotto,
-        # pronto per essere passato al modulo TTS (Text-to-Speech) senza metadati indesiderati.
+        # Inizializzazione del core Agent tramite Agno.
+        # Definendo 'output_schema', previeniamo le allucinazioni testuali imponendo un parsing JSON rigoroso.
         self.agent = Agent(
-            model=Gemini(id=model_id),
-            # [PATTERN: Persona Adoption]
-            # Inizializzo il modello forzando l'assunzione di ruolo (Role-Playing).
-            description="Sei un Dialoghista e Adattatore Cinematografico Senior. Il tuo unico scopo è adattare copioni per il doppiaggio (Automated Dubbing), garantendo una perfetta isocronia (stessa lunghezza fonologica) rispetto all'audio originale. Devi sacrificare la traduzione letterale a favore della corrispondenza temporale, mantenendo però intatto il significato originario.",
-            # [PATTERN: Constraint Prompting & Geometric Bounding]
-            # Definizione dei vincoli rigidi (Hard Constraints) per l'output generato.
-            # Imponendo un tetto massimo basato sulla geometria del testo originale (character/syllable count),
-            # creazione di un Proxy per l'isocronia fonetica. Questo forza il modello a combattere
-            # il Text Expansion intrinseco delle traduzioni cross-lingua, garantendo che il downstream
-            # TTS operi in un regime di Time-Stretching tollerabile o nullo.
-           instructions=[
-                f"La lingua di destinazione per il doppiaggio è: {self.target_language}.",
-                "VINCOLO DI ISOCRONIA: Ogni singola battuta DEVE avere una lunghezza visiva e un numero di sillabe quasi identico all'originale (+/- 10%).",
-                "VINCOLO TOPOLOGICO (CRITICO): Riceverai un copione con righe numerate (es. [0] ..., [1] ...). DEVI restituire la traduzione mantenendo ESATTAMENTE la stessa struttura e la stessa numerazione all'inizio di ogni riga.",
-                "Non fondere o unire mai le righe numerate, anche se la fluidità grammaticale lo suggerirebbe. Mantieni la frammentazione acustica originale.",
-                "Restituisci ESATTAMENTE E SOLO il copione numerato e tradotto, senza aggiungere note, spiegazioni o convenevoli."
+            model=Groq(id=model_id),
+            output_schema=DubbingScript,
+            description="Sei il Direttore del Doppiaggio e Adattatore Cinematografico Senior. Il tuo lavoro NON è fare traduzioni letterali, ma creare ADATTAMENTI PER IL DOPPIAGGIO (Lip-Sync).",
+            instructions=[
+                # Ancoraggio esplicito e contestuale della lingua sorgente ('Italiano') per isolare le derive morfologiche interne.
+                f"OBIETTIVO: Adattare il copione originale DALL'ITALIANO in {self.target_language} per un doppiaggio con sincronia labiale (lip-sync) perfetta.",
+                "REGOLE D'ORO DELL'ADATTAMENTO:",
+                "1. ISOCRONIA SILLABICA: Non contare le parole, conta le SILLABE. Il testo di destinazione deve avere un tempo di pronuncia identico all'originale.",
+                "2. RINUNCIA ALLA LETTERALITÀ: Se una traduzione esatta è troppo lunga o troppo corta, stravolgi la frase. Usa sinonimi, idiomi, ometti dettagli o aggiungi riempitivi pur di mantenere la lunghezza.",
+                "3. SINCRONIA LABIALE (FONETICA): Fai attenzione agli attacchi e alle chiusure. Cerca di far coincidere le consonanti bilabiali (B, P, M) nei punti in cui la bocca si chiude nel video.",
+                "4. FLUIDITÀ PARLATA: Le frasi devono suonare come se fossero dette da una persona reale, non lette da un libro. Evita costruzioni grammaticali rigide.",
+                "Compila sempre il campo 'adaptation_notes' per dimostrare che hai bilanciato sillabe e labiali prima di scrivere il 'text' finale."
             ]
         )
     
     def translate(self, chunks: list[dict]):
         """
-        Riceve l'intero array di segmenti audio estratti dal trascriber upstream.
-        Il metodo è predisposto per la serializzazione topologica, mappando ogni chunk 
-        a un indice univoco. Questo garantisce la Context Window globale all'LLM 
-        forzando il mantenimento dell'isocronia tramite Constraint Prompting.
-
-        Args:
-            chunks (list[dict]): Lista di dizionari contenente il payload acustico estratto.
-
-        Returns:
-            str: Il copione globale tradotto e numerato per l'orchestrazione TTS.
-
+        Gestore dell'inferenza in batch per array di sottotitoli. 
+        Mantiene rigorosamente l'integrità topologica (ordine temporale) degli stream, analizzando anche chunk vuoti.
         """
         try:
-            # Compone un payload indicizzato riga per riga. 
-            # Inietta esplicitamente un ID per mappare l'output alle frasi tradotte ai rispettivi timestamp originali.
             payload_lines = []
+            empty_indices = set()  # Indici intrinsecamente vuoti salvati in Heap pre-computazionale O(1)
+
+            # Pre-processing topologico: inietta identificatori per il mapping post-inferenza.
             for i, chunk in enumerate(chunks):
                 original_text = chunk.get("text", "").strip()
                 if original_text:
                     payload_lines.append(f"[{i}] {original_text}")
+                else:
+                    # Caching logico dei chunk silenti: evita il processing superfluo 
+                    # prevendendo altresì un falso fallback retroattivo in lingua originale.
+                    empty_indices.add(i)  
             
-            # Serializza la struttura da array a stringa per l'injection nel batch prompt
             enriched_payload = "\n".join(payload_lines)
             
-            # Esecuzione asincrona/sincrona della chiamata all'LLM (agente)
-            response = self.agent.run(enriched_payload)
-            raw_output = response.content
-            print(f"--- RAW LLM OUTPUT ---\n{raw_output}\n----------------------")
-            
-            # Estrazione sicura tramite Regex: estrapola il pattern [ID] Testo.
-            # Serve a mitigare potenziali allucinazioni in cui l'LLM aggiunge testo spurio (verbosity pre/post generazione)
-            pattern = r"(?:\[)?(\d+)(?:\]|\.|:)?\s*(.*)"
-            matches = re.findall(pattern, raw_output)
+            # Costruzione dinamica del prompt pre-inferenza. Passato al target di esecuzione per 
+            # forzare la priorità dei task d'azione sull'engine.
+            prompt = (
+                f"Adatta le seguenti battute dall'Italiano al {self.target_language} "
+                f"per il doppiaggio con lip-sync. "
+                f"Restituisci TUTTE le righe nel formato richiesto.\n\n"
+                f"{enriched_payload}"
+            )
+            response = self.agent.run(prompt)
+            script_data = response.content
 
-            # Costruisce una mappa hash per un rapido lookup in O(1) in fase di ricostruzione vettoriale
-            translation_map = {int(idx): text.strip() for idx, text in matches}
+            # Type Guard a runtime: Se il wrapper LLM emittente ritorna nativamente una stringa cruda in luogo 
+            # dell'atteso DTO in JSON, quest'ultima viene re-idratata forzatamente nell'istanza Pydantic.
+            if isinstance(script_data, str):
+                script_data = DubbingScript(**json.loads(script_data))
+
+            # Telemetria passiva per monitoraggio dell'ecosistema CoT su Stdout locale
+            for line in script_data.lines:
+                print(f"ID [{line.id}] Analisi: {line.adaptation_notes}\n-> {line.text}\n")
+            
+            # Strutturazione Hash Table per lookup rapido a O(1). Costruito per marginare i rischi 
+            # di desincronizzazione causata da probabili frame-loss dell'LLM (chiavi perse a run-time).
+            translation_map = {line.id: line.text for line in script_data.lines}
             
             final_translations = []
-            # Scorre l'array originale garantendo il mantenimento dell'ordinamento topologico dei frammenti (chunk)
+            
+            # Ricostruzione Vettoriale: Garantisce la rigidità morfologica dell'array resituito:
+            # pari grandezza e indici coincidenti con `len(chunks)`.
             for i in range(len(chunks)):
-                # Strategia di Fallback (Graceful Degradation): se il modello perde un indice, 
-                # preferiamo iniettare la stringa grezza originale piuttosto che dereferenziare un indice mancante
-                # causando sfasamenti in downstream (sync audio/video scorretto)
-                translated_text = translation_map.get(i, chunks[i].get("text", ""))
-                final_translations.append(translated_text)
+                if i in empty_indices:
+                    # Inserimento "noop" sicuro per flussi nulli, arginando il fallimento sul recupero dizionario.
+                    final_translations.append("")
+                else:
+                    # Strategia di Fallback (Graceful Degradation): in rari casi di "keymiss" dovuti ad un 
+                    # drop dell'LLM preserviamo lo slot temporale per non scomporre le label a seguire (Lip-Sync shift).
+                    translated_text = translation_map.get(i, chunks[i].get("text", ""))
+                    final_translations.append(translated_text)
                 
             return final_translations
 
         except Exception as e:
-            # Gestione base degli errori: restituisce una stringa formattata con il dettaglio dell'eccezione
+            # Wrapping try-catch per facilitare l'event-bubbling su microservizio parent (FastAPI, ecc).
             return f"[ERRORE DI TRADUZIONE]: {str(e)}"
-        
-        
-        

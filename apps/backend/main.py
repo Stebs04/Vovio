@@ -81,10 +81,10 @@ app = FastAPI(
 )
 
 # Configurazione del middleware CORS (Cross-Origin Resource Sharing)
-# Permette alle Single Page Application locali (es. frontend React/Next.js) di interrogare l'API vovio
+# Permette al frontend React/Next.js di interrogare l'API vovio
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

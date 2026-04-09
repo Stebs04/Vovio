@@ -1,74 +1,94 @@
 # 🎬 Vovio - Automated Video Dubbing Pipeline
 
-[![FastAPI](https://img.shields.io/badge/FastAPI-005571?style=for-the-badge&logo=fastapi)](https://fastapi.tiangolo.com/)
-[![Next.js](https://img.shields.io/badge/Next.js%2016-black?style=for-the-badge&logo=next.js&logoColor=white)](https://nextjs.org/)
-[![PyTorch](https://img.shields.io/badge/PyTorch-%23EE4C2C.svg?style=for-the-badge&logo=PyTorch&logoColor=white)](https://pytorch.org/)
+![Next.js](https://img.shields.io/badge/Next.js%2016-black?style=for-the-badge&logo=next.js&logoColor=white)
+![React](https://img.shields.io/badge/React%2019-20232A?style=for-the-badge&logo=react&logoColor=61DAFB)
+![FastAPI](https://img.shields.io/badge/FastAPI-005571?style=for-the-badge&logo=fastapi&logoColor=white)
+![PyTorch](https://img.shields.io/badge/PyTorch-%23EE4C2C.svg?style=for-the-badge&logo=PyTorch&logoColor=white)
+![Python](https://img.shields.io/badge/Python-3670A0?style=for-the-badge&logo=python&logoColor=ffdd54)
+![TailwindCSS](https://img.shields.io/badge/Tailwind_CSS_v4-38B2AC?style=for-the-badge&logo=tailwind-css&logoColor=white)
 
-**Vovio** è una piattaforma avanzata per la trascrizione, traduzione e doppiaggio automatizzato di contenuti video. Progettata con un'architettura a microservizi disaccoppiata, sfrutta un ecosistema di Agenti AI specializzati per estrarre il parlato, adattare i copioni garantendo l'isocronia e sintetizzare l'audio clonando la voce originale.
+**Vovio** è una piattaforma avanzata e altamente ottimizzata per la trascrizione, traduzione e doppiaggio automatizzato di contenuti video. 
+
+Progettata con una moderna architettura a microservizi disaccoppiata, Vovio sfrutta un ecosistema di **Agenti AI specializzati** per estrarre il parlato, adattare i copioni garantendo l'isocronia (sincronismo labiale/temporale) e sintetizzare l'audio clonando la voce originale.
 
 ---
 
 ## 🏗️ Architettura del Sistema
 
-Il progetto adotta un pattern **Orchestratore-Worker**, separando nettamente l'interfaccia utente, la gestione delle API e l'inferenza cruda dei modelli AI.
+Il progetto adotta un solido pattern **Orchestratore-Worker**, separando in modo netto l'interfaccia utente, la gestione delle API e i complessi calcoli dei modelli AI.
 
-### 1. Frontend (Next.js & React 19)
-Il client è costruito con **Next.js 16.2.1** e **Tailwind CSS v4**. Il cuore logico è racchiuso nell'hook `useVovioPipeline`, una macchina a stati finiti che traccia l'avanzamento (`IDLE`, `TRANSCRIBING`, `TRANSLATING`, `DUBBING`, `SUCCESS`). 
-Per le operazioni intensive come il doppiaggio, il client implementa un meccanismo di **short-polling asincrono**, interrogando il backend ogni 3 secondi per aggiornare la UI con la percentuale di completamento senza saturare il Thread Pool.
+- 🖥️ **Frontend (Next.js 16 & React 19):** Interfaccia utente fluida stilizzata con Tailwind CSS v4. Implementa una macchina a stati per tracciare il processo e utilizza un sistema di **short-polling asincrono** (ogni 3 secondi) per aggiornare l'avanzamento del doppiaggio senza saturare il sistema.
+- ⚙️ **Backend Orchestrator (FastAPI):** Funge da router puro. Gestisce l'upload dei flussi video in directory temporanee e delega il calcolo pesante agli agenti AI tramite `BackgroundTasks` non bloccanti.
 
-### 2. Backend Orchestrator (FastAPI)
-Il server `main.py` funge da router puro. Riceve il flusso video, persiste i file in una directory temporanea e delega i calcoli agli agenti AI. Utilizza i `BackgroundTasks` di FastAPI per processare il doppiaggio in modo non bloccante, memorizzando lo stato dei job in memoria per rispondere ai poll del client.
+### 🧠 L'Ecosistema degli Agenti AI
 
-### 3. I Componenti AI (The Agents)
-L'ecosistema di intelligenza artificiale è suddiviso in tre moduli principali isolati:
+L'intelligenza artificiale di Vovio è suddivisa in tre moduli isolati e specializzati:
 
-* 🎙️ **TranscriptionAgent:** Basato su `faster-whisper`. Esegue la trascrizione su CPU con quantizzazione `int8` per ottimizzare le risorse, dividendo l'audio in segmenti precisi e annotando i timestamp (start/end) con una `beam_size` di 5.
-* 🧠 **TranslationAgent:** Costruito sopra il framework `Agno` e interfacciato con il modello `gemini-2.5-flash`. Applica un rigoroso *Constraint Prompting* imponendo al modello il ruolo di "Adattatore Cinematografico". Garantisce l'**isocronia** costringendo il testo tradotto a mantenere una lunghezza sillabica molto simile all'originale (+/- 10%), mantenendo l'ordine topologico delle frasi essenziale per il downstream.
-* 🗣️ **SynthesizerAgent:** Utilizza `Coqui-TTS` (`xtts_v2`) per il Text-to-Speech e la clonazione vocale. Per prevenire il collasso dell'attenzione nel modello (attention collapse), l'agente esegue un *chunking* intelligente del testo analizzando la punteggiatura prima di generare l'audio e concatenare i tensori.
+1. 🎙️ **TranscriptionAgent (`faster-whisper`):** Esegue la trascrizione audio estraendo segmenti precisi e annotando i timestamp. Ottimizzato per l'efficienza con quantizzazione `int8` su CPU e una `beam_size` di 5.
+2. 🧠 **TranslationAgent (`Agno` + `gemini-2.5-flash`):** Il cuore dell'adattamento. Agisce come un vero "Adattatore Cinematografico" tramite rigorosi *Constraint Prompt*. Garantisce l'**isocronia** costringendo il testo tradotto a mantenere una lunghezza sillabica paragonabile all'originale (+/- 10%), preservando l'ordine topologico delle frasi.
+3. 🗣️ **SynthesizerAgent (`Coqui-TTS xtts_v2`):** Gestisce il Text-to-Speech e la clonazione vocale. Per evitare il problema del collasso dell'attenzione (attention collapse), esegue un *chunking intelligente* del testo basato sulla punteggiatura prima di generare e concatenare l'audio.
 
 ---
 
-## 🚀 Guida all'Installazione e Avvio
+## 📋 Prerequisiti
 
-Il repository è provvisto di un setup "DevX" altamente automatizzato che rileva il tuo sistema operativo ed esegue l'installazione idempotente delle dipendenze.
+Prima di iniziare, assicurati di avere installato:
+- **Node.js** (v18 o superiore) e `npm`
+- **Python** (v3.10 o superiore)
+- **FFmpeg** installato e correttamente configurato nel PATH di sistema.
 
-### Prerequisiti
-* **Node.js** (v18+ raccomandata) e `npm`
-* **Python 3.10 o superiore**
-* **FFmpeg** installato e configurato nel PATH di sistema.
+---
 
-### 1. Configurazione Iniziale
-Clona il repository e crea il tuo file di configurazione ambientale nella root directory del progetto:
+## 🛠️ Configurazione dell'Ambiente (.env)
+
+Il progetto richiede la configurazione di due file `.env` per gestire l'hardware e le chiavi API.
+
+### 1. Configurazione Hardware (Root)
+Nella cartella principale del progetto (root), crea un file `.env`:
 ```bash
 cp .env.example .env
 ```
-Nel file .env, imposta la variabile hardware:
+Apri il file e imposta la variabile hardware in base al tuo sistema:
 
-+ USE_CUDA=1 se hai una GPU Nvidia e vuoi accelerare l'inferenza AI.
+- USE_CUDA=1 👉 Se hai una GPU Nvidia e vuoi scaricare i binari PyTorch per CUDA (accelerazione hardware).
 
-+ USE_CUDA=0 (o lascia vuoto) per il fallback automatico su esecuzione via CPU.
+- USE_CUDA=0 (o lascia vuoto) 👉 Per l'installazione standard basata su CPU (fallback automatico).
 
-### 2. Avvio dell'Ambiente di Sviluppo
-Il progetto include due script gemelli (start_dev.bat per Windows e start_dev.sh per macOS/Linux).
-
-Esegui lo script dalla root del progetto:
-
-**Su Windows:**
+### 2. Configurazione Backend (Chiavi API)
+Spostati nella cartella del backend (apps/backend/) e crea il file .env:
 ```bash
+cd apps/backend
+cp .env.example .env
+```
+Apri il file e configura i seguenti parametri essenziali:
+```bash
+# Obbligatorio per abilitare l'uso dei modelli TTS di Coqui AI
+COQUI_TOS_AGREED=1
+
+# Inserisci la tua chiave API per l'agente di traduzione
+GROQ_API_KEY=la_tua_chiave_api_qui
+```
+##🚀 Avvio dell'Ambiente di Sviluppo
+
+Vovio è dotato di un setup DevX automatizzato. Gli script di avvio si occupano di creare ambienti virtuali isolati, scaricare la build corretta di PyTorch (CPU o GPU), sincronizzare pacchetti pip e npm in modo idempotente e lanciare i server in parallelo.
+
+Torna nella cartella principale (root) ed esegui il comando corrispondente al tuo sistema operativo:
+
+Windows:
+```dos
 .\start_dev.bat
 ```
-**Su Linux/MacOs:**
-```bash
+Linux / macOS:
+```dos
 chmod +x start_dev.sh
 ./start_dev.sh
 ```
-**Cosa fa lo script dietro le quinte?**
+Cosa succede ora? > Il Backend (FastAPI) si avvierà in background sulla porta 8000, mentre il Frontend (Next.js) partirà in foreground nel tuo terminale.
 
-1. **Dependency Injection Hardware-Aware:** Crea un virtual environment Python isolato (venv) e, in base al flag USE_CUDA, scarica automaticamente la build corretta di PyTorch (CPU o CUDA 12.1).
+## 🛑 Spegnimento
 
-2. **Sincronizzazione Dipendenze:** Esegue pip install e npm install in modo idempotente (scarica solo i delta necessari).
+Per terminare l'applicazione in modo pulito ed evitare processi "zombie" in background:
 
-3. **Bootstrap Coordinato: Lancia il server uvicorn (Backend)** in background sulla porta 8000 e il frontend server Next.js in foreground.
+- Premi ripetutamente CTRL+C nel terminale dove è in esecuzione lo script.
 
-### 3. Spegnimento
-Per terminare l'applicazione in modo pulito e prevendo processi zombie
+- Lo script intercetterà il segnale e invierà una richiesta di chiusura coordinata a tutti i microservizi, liberando le porte TCP.

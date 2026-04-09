@@ -38,9 +38,27 @@ async def lifespan(app: FastAPI):
     Pre-carica i modelli AI pesanti prima di iniziare ad accettare il traffico di rete,
     garantendo che l'API sia reattiva fin dalla prima richiesta (warm-start).
     """
+    import shutil
     print("⏳ Avvio istanziazione dei modelli AI in corso (operazione memory-intensive, attendere)...")
     print(f"🔧 Accelerazione Hardware (CUDA) rilevata: {torch.cuda.is_available()}")
     
+    # [MODIFICA] Pulizia della cartella temporanea all'avvio del server.
+    # I file temporanei generati dalle elaborazioni verranno mantenuti fino al prossimo avvio
+    # per facilitare il debugging. Inizializziamo lo stato del backend partendo da una TEMP_DIR pulita.
+    print(f"🧹 Pulizia della directory temporanea ({TEMP_DIR}) all'avvio del server...")
+    try:
+        if TEMP_DIR.exists():
+            for item in TEMP_DIR.iterdir():
+                if item.is_file():
+                    item.unlink()
+                elif item.is_dir():
+                    shutil.rmtree(item)
+        else:
+            TEMP_DIR.mkdir(parents=True, exist_ok=True)
+        print("✅ Directory temporanea pulita e inizializzata con successo.")
+    except Exception as e:
+        print(f"⚠️ Errore durante la pulizia della directory temporanea: {e}")
+
     # Inizializzazione e allocazione degli agenti AI nel registry globale
     agents["transcriber"] = TranscriptionAgent()
     agents["synthesizer"] = SynthesizerAgent()
@@ -244,9 +262,10 @@ def process_dubbing_task(job_id: str, request: DubbingRequest):
         )
         
         #PULIZIA FILE INTERMEDI
-        # Usa il metodo .unlink() di pathlib che elimina il file dal disco.
-        # missing_ok=True evita crash se il file per qualche motivo non c'è.
-
+        # [MODIFICA] Disabilitata la cancellazione automatica dei file intermedi (audio, tracce isolate).
+        # Ora i file vengono conservati fino al successivo avvio o riavvio del server.
+        # Ciò facilita enormemente il debug dei flussi audio non andati a buon fine.
+        """
         try:
             video_path.unlink(missing_ok=True)
             reference_audio_path.unlink(missing_ok=True)
@@ -254,6 +273,8 @@ def process_dubbing_task(job_id: str, request: DubbingRequest):
             print("✅ File intermedi (originali e tracce separate) eliminati con successo.")
         except Exception as cleanup_error:
             print(f"⚠️ Impossibile eliminare i file intermedi: {cleanup_error}")
+        """
+        print("📁 I file intermedi non sono stati eliminati per consentirne la diagnostica, come richiesto.")
 
         # Consolida e conclude il tracing del job nello store in-memory in caso di run immacolata
         job_store[job_id].update({
@@ -305,7 +326,10 @@ async def download_file(filename: str, background_tasks: BackgroundTasks):
     """
     file_path = TEMP_DIR / filename
 
-    # Funzione di utilità per rimuovere il file a posteriori
+    # [MODIFICA] Disattivata la rimozione del file finale dopo il download.
+    # Il file video originale e quello doppiato permangono nel filesystem temporaneo.
+    # Il task programmato per auto-distruggerli dopo il download è stato commentato come richiesto.
+    """
     def remove_file_after_download(path_to_remove: Path):
         try:
             path_to_remove.unlink(missing_ok=True)
@@ -317,7 +341,8 @@ async def download_file(filename: str, background_tasks: BackgroundTasks):
     # FastAPI eseguirà questa funzione in automatico SOLO DOPO che il FileResponse
     # avrà terminato di inviare l'ultimo byte al browser dell'utente.
     background_tasks.add_task(remove_file_after_download, file_path)
-
+    """
+    
     return FileResponse(
         path=str(file_path),
         media_type="video/mp4",

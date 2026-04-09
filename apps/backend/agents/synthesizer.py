@@ -109,101 +109,127 @@ class SynthesizerAgent:
         # Restituisce l'array dei chunk testuali validati.
         return chunks
     
-    def generate_audio(self, segments: list[dict], target_language: str, reference_audio_path: str, progress_callback=None):
+    def generate_audio(self, segments: list[dict], target_language: str, reference_audio_path: str, target_duration_sec: float = None, progress_callback=None):
         """
-        Sintetizza i frammenti vocali e li posiziona in modo assoluto su una timeline audio.
-        Implementa chunking testuale interno per evitare saturazione del modello TTS.
-        
-        Args:
-            segments (list[dict]): Array di payload testuali con i relativi timestamp (start/end).
-            target_language (str): Locale di destinazione (es. 'it', 'en').
-            reference_audio_path (str): Percorso del file audio target per il features cloning (speaker wav).
-            progress_callback (Callable): Hook opzionale per la notifica asincrona dello stato di avanzamento.
-            
-        Returns:
-            str: Il percorso assoluto su filesystem del file audio locale (WAV) generato, o stringa d'errore.
+        Sintetizza i frammenti vocali e li posiziona su una timeline audio esatta.
+        Garantisce che la traccia finale duri esattamente quanto richiesto, ideale per un muxing perfetto.
         """
+        # Inizio di un blocco try-except per isolare e intercettare qualsiasi errore durante il ciclo di sintesi.
         try:
-            # Determinazione del path temporaneo per il salvataggio della traccia vocale isolata.
+            # Genera il nome del file di output dinamicamente concatenando il codice lingua (es. dubbed_it.wav).
             output_filename = f"dubbed_{target_language}.wav"
+            # Costruisce il percorso assoluto sul disco, innestandolo nella specifica directory temporanea.
             output_path = str(TEMP_DIR / output_filename)
             
-            # Frequenza fissa di campionamento richiesta dai tensori in output del modello XTTS_v2.
+            # Imposta la frequenza di campionamento fissa a 24kHz compatibile coi tensori prodotti dal modello XTTS.
             SAMPLE_RATE = 24000 
-            
-            # Buffer tridimensionale (start, end, tensor). Accumula the clip prima del mix-down finale sulla timeline.
+            # Inizializza un vettore vuoto che funzionerà da buffer in-memory per immagazzinare le singole clip generate.
             generated_clips = []
+            # Mantiene in memoria il posizionamento temporale finale dell'ultimo clip elaborato per evitare overlap.
+            last_end_sample = 0 
             
-            # High-water mark per stabilire l'ampiezza logica del canvas audio preallocato (in campioni).
-            max_sample_needed = 0
+            # 1. DEFINIAMO LA LUNGHEZZA ESATTA DEL CANVAS AUDIO (LA "TELA")
+            # Controller per assicurarsi che un parametro base di limitazione temporale sia stato esplicitamente servito in ingresso.
+            if target_duration_sec is None:
+                try:
+                    # Interroga i layer sottostanti al file di referenza per estrarre la root struct dei metadati originali.
+                    ref_info = torchaudio.info(reference_audio_path)
+                    # Calcola i secondi effettivi convertendo il conteggio dei frames con diviso il sample rate primario.
+                    target_duration_sec = ref_info.num_frames / ref_info.sample_rate
+                except Exception:
+                    # Condizione di scarto ed handling fail-safe contro stream corrotti; la traccia è generata come buffer zero length.
+                    target_duration_sec = 0.0
+
+            # Scala la durata da valore reale in Float ai campioni necessari rappresentabili in matrice Array allocando le frequenze.
+            master_total_samples = int(target_duration_sec * SAMPLE_RATE)
             
+            # Inizia un ciclo d'orchestrazione sui segmenti semantici pre formattati iniettati a monte dal modulo di trascrizione locale.
             for i, segment in enumerate(segments):
-                # Dispatch dell'evento di status per tracciare il batch upstream sull'interfaccia.
+                # Validazione della funzione esterna inieittata per notificare in asincrono al modulo upstream lo scaling d'avanzamento.
                 if progress_callback:
+                    # Calcola il rate di completamento con scalare a cento.
                     current_pct = int((i / len(segments)) * 100)
+                    # Trigger che dispatccia lo scope UI o Job Manager allo status sintetizzazione locale progressivo.
                     progress_callback(current_pct, "synthesizing")
                 
+                # Cerca l'estratto esatto di token str dalla collection e fa fallback stringa vuota al trigger per index miss match pass.
                 text_chunk = segment.get('text', '')
+                # Estrae il timestamp float in secondi dalla pipeline di VAD originaria.
                 start_time = segment.get('start', 0.0)
                 
-                # Pruning logico veloce per bypassare frammenti puramente silenziosi o parsati a vuoto.
+                # Layer di filtering: Elimina battute mute o puramente white space che farebbero bloccare staticamente il TTS generator.
                 if not text_chunk.strip(): 
+                    # Scarta questo indice e processa l'operatore prossimo al dispatch logico buffer.
                     continue
                 
-                # Split testuale preventivo (chunking). XTTS degrada le performances con testi stringenti 
-                # causando instabilità fonetiche a causa del collasso della attention window.
+                # Splitta in porzioni sub ottimali il costrutto estraibile tramite function adibita per ridurre fall-rate ed overlap d'allucinazioni su XTTS.
                 sub_chunks = self._chunk_text(text_chunk, max_chars=200)
-                
-                # Mappatura del punto di offset: dal dominio del tempo (secondi) al dominio del campione (discreto).
+                # Calcola il campione d'offset d'inizio target dalla baseline float applicando la scala di frequenza nominale locale.
                 current_start_sample = int(start_time * SAMPLE_RATE)
                 
+                # Check d'integrità dinamico contro la colissione sonora "overlap". Analizza il delta con la precendete esecuzione vettoriale.
+                if current_start_sample < last_end_sample:
+                    # Corregge matematicamente facendo back-shift allineandolo a confine della struttura precedente per preservare chiarezza vocalica totale.
+                    current_start_sample = last_end_sample
+                
+                # Avanza all'interno delle frammentazioni semantiche derivate (micro frasi per alleggerire attention network).
                 for sub_text in sub_chunks:
-                    # Invocazione zero-shot text-to-speech per l'approssimazione vocale (cloning) del blocco.
+                    # Utilizza l'handler deep learning in zero-shot inference tramite core di referenza speaker clonata con coqui library framework.
                     wav_array = self.tts.tts(
                         text=sub_text, 
                         speaker_wav=reference_audio_path, 
                         language=target_language
                     )
                     
-                    # Type casting: converte l'array C-style di numpy in un tensore ottimizzato residente su PyTorch.
+                    # Converte la list-like struttura python memory managed passata da back API a Tensor PyTorch compilato in C-struct.
                     wav_tensor = torch.tensor(wav_array)
-                    
-                    # Definisce l'indiciatore iterativo di fine-lettura per il layer di buffer di base al clipping appena istanziato.
+                    # Deriva metricamente la length vettoriale (frame fine) sommando il sample index d'inizio al computo del tensore scalare generato locale.
                     end_sample = current_start_sample + len(wav_tensor)
                     
+                    # Store tracking: Aggancia l'inizio offset matematico locale, punto terminale vettoriale predetto locale e buffer audio originato in buffer array.
                     generated_clips.append((current_start_sample, end_sample, wav_tensor))
-                    
-                    # Tracking dinamico del frame totale più elevato (resize indiretto della timeline container).
-                    if end_sample > max_sample_needed:
-                        max_sample_needed = end_sample
-                        
-                    # Shift dell'offset puntatore per interpolare sub-paragrafi contigui (nella medesima battuta).
+                    # Shifta dinamicamente il marker per preallinearsi alla terminazione dell'array attuale.
                     current_start_sample = end_sample
+                
+                # Aggiorna tracciamento global interation posizionando il gate d'astrazione come salvataggio boundary limit per validazione offset cross frase locale.
+                last_end_sample = current_start_sample
             
-            # Guard-clause estrema avverso allocazioni hardware erranti (vettori zero size).
+            # Scarto d'esecuzione. Segnala operazione vacante e lancia trigger standard verso macro API su list loop fallace locale vuoto strutturato d'error management.
             if not generated_clips:
+                # Resettare a pipeline vuota lo stato locale pass.
                 raise ValueError("Nessun segmento valido da sintetizzare.")
                 
-            # Preallocazione hard-memory del master mix buffer ("canvas") con silence padding omogeneo.
-            final_audio = torch.zeros(max_sample_needed)
+            # 2. CREIAMO LA TRACCIA VUOTA DELLA LUNGHEZZA PERFETTA
+            # Valutiamo la grandezza massima generata o imposta per prevenire memory exception allocate.
+            final_length = max(last_end_sample, master_total_samples)
+            # Inizializziamo il tensore PCM vuoto pre-creando sample rates binari zero (mute canvas background vector stream builder allocation) della master length locale reale.
+            final_audio = torch.zeros(final_length)
             
-            # Mux in-memory vettoriale: posiziona per slicing e sovrappone aritmeticamente tutti i clip sul target sample rate.
+            # Ripetiamo il buffer vettoriale originario e mappiamo d'append sull'estrazione master tramite lacing ed additive mixing overlay puro.
             for start_sample, end_sample, wav_tensor in generated_clips:
+                # Layering sonoro. Aggiunge dinamicamente per reference di range index il tensor nel canvas pre istanziato locale.
                 final_audio[start_sample:end_sample] += wav_tensor
             
-            # Gain staging and Mastering (Peak Normalization limit). Assicura il fall-off anti distorsione / alias 
-            # nel denaturare clipping dovuti a somma di segnali su frames paralleli.
+            # 3. TAGLIO DI PRECISIONE AL MILLISECONDO
+            # Effettuiamo un fall-off esplicito sul marker di master timing allocato originale pre process di sintesi.
+            if master_total_samples > 0:
+                # Applichiamo slice destrutturato matematico del vettore binario tagliando le sbavature posteriori generate temporalmente in eccedente limitate.
+                final_audio = final_audio[:master_total_samples]
+            
+            # Routine di Gain Normalization Peak-limit. Corregge le sbordature (clip in rosso) oltre il range floating standard (-1.0;1.0 bit struct) a salvaguardia di pop stream render audio e compression dynamic struct pre disk.
             if final_audio.max() > 1.0 or final_audio.min() < -1.0:
+                # Mantiene la gain proportion originaria limitando l'RMS a livello normalizzato 0dbFs (1 Float range limit peak) tramite rapporto master gain peak allocation div locale divisione massima range limit float scalare div iso.
                 final_audio = final_audio / max(final_audio.max(), abs(final_audio.min()))
                 
-            # Aggiunta di asse fittizio per rispettare la signature del decoder torchaudio (Channel augmentation).
+            # Adatta la single array track unificata creata con pseudo-mono channel aggiungendo asse frontale. Requisito torchaudio (n channel padding front offset unsqueeze method).
             final_audio = final_audio.unsqueeze(0)
-            
-            # Flushing persistente del buffer su disco locale come RIFF PCM (.WAV).
+            # Scrive e flusha buffer tensor torchaudio salvando come disco payload master WAV con rate encoding.
             torchaudio.save(output_path, final_audio, SAMPLE_RATE)
             
+            # Rilascia puntatore e cede handling file locale in string come exit signal handler di conformità pass API.
             return output_path
             
+        # Exception handler per fault catch in isolamento pass stream back-trace d'ispezione al chiamante locale.
         except Exception as e:
-            # Trap graceful per far rimbalzare eccezioni non gestite direttamente su middleware o UI.
+            # Trap exception general purposing standard per l'aggancio da master thread dispatcher loop return trace pre formattato per front API local scope caller string reference response fallback d'invio asincrono locale UI string display callback UI message fall.
             return f"[ERRORE DI SINTESI VOCALE]: {str(e)}"

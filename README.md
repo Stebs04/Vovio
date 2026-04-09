@@ -68,7 +68,7 @@ COQUI_TOS_AGREED=1
 # Inserisci la tua chiave API per l'agente di traduzione
 GROQ_API_KEY=la_tua_chiave_api_qui
 ```
-##🚀 Avvio dell'Ambiente di Sviluppo
+## 🚀 Avvio dell'Ambiente di Sviluppo
 
 Vovio è dotato di un setup DevX automatizzato. Gli script di avvio si occupano di creare ambienti virtuali isolati, scaricare la build corretta di PyTorch (CPU o GPU), sincronizzare pacchetti pip e npm in modo idempotente e lanciare i server in parallelo.
 

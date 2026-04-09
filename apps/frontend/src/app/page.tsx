@@ -174,8 +174,7 @@ export default function VovioMainPage() {
               <select 
                 value={targetLanguage}
                 onChange={(e) => setTargetLanguage(e.target.value)}
-                className="bg-white px-4 rounded-2xl font-bold border border-slate-200 focus:outline-none"
-              >
+                className="bg-white px-4 rounded-2xl font-bold border border-slate-200 focus:outline-none">
                 <option value="en">Inglese</option>
                 <option value="es">Spagnolo</option>
                 <option value="fr">Francese</option>

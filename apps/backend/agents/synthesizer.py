@@ -147,8 +147,13 @@ class SynthesizerAgent:
             for i, segment in enumerate(segments):
                 # Validazione della funzione esterna inieittata per notificare in asincrono al modulo upstream lo scaling d'avanzamento.
                 if progress_callback:
-                    # Calcola il rate di completamento con scalare a cento.
-                    current_pct = int((i / len(segments)) * 100)
+                    # [MODIFICA BUGFIX PROGRESS BAR]
+                    # Calcoliamo localmente l'avanzamento. Invece di scalare da 0 a 100,
+                    # lo scaliamo da 0 a 90, in modo che il 10% rimanente resti riservato 
+                    # alla successiva operazione di merging (Video Muxing).
+                    # Questo previene il fastidioso elastico grafico dove il counter raggiunge 
+                    # il 99% per ricascare brutalmente a 90% a inizio muxing.
+                    current_pct = int((i / len(segments)) * 90)
                     # Trigger che dispatccia lo scope UI o Job Manager allo status sintetizzazione locale progressivo.
                     progress_callback(current_pct, "synthesizing")
                 

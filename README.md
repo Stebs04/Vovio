@@ -25,7 +25,7 @@ Il progetto adotta un solido pattern **Orchestratore-Worker**, separando in modo
 L'intelligenza artificiale di Vovio è suddivisa in tre moduli isolati e specializzati:
 
 1. 🎙️ **TranscriptionAgent (`faster-whisper`):** Esegue la trascrizione audio estraendo segmenti precisi e annotando i timestamp. Ottimizzato per l'efficienza con quantizzazione `int8` su CPU e una `beam_size` di 5.
-2. 🧠 **TranslationAgent (`Agno` + `gemini-2.5-flash`):** Il cuore dell'adattamento. Agisce come un vero "Adattatore Cinematografico" tramite rigorosi *Constraint Prompt*. Garantisce l'**isocronia** costringendo il testo tradotto a mantenere una lunghezza sillabica paragonabile all'originale (+/- 10%), preservando l'ordine topologico delle frasi.
+2. 🧠 **TranslationAgent (`Agno` + `llama-3.3-70b`):** Il cuore dell'adattamento. Agisce come un vero "Adattatore Cinematografico" tramite rigorosi *Constraint Prompt*. Garantisce l'**isocronia** costringendo il testo tradotto a mantenere una lunghezza sillabica paragonabile all'originale (+/- 10%), preservando l'ordine topologico delle frasi.
 3. 🗣️ **SynthesizerAgent (`Coqui-TTS xtts_v2`):** Gestisce il Text-to-Speech e la clonazione vocale. Per evitare il problema del collasso dell'attenzione (attention collapse), esegue un *chunking intelligente* del testo basato sulla punteggiatura prima di generare e concatenare l'audio.
 
 ---
@@ -68,7 +68,7 @@ COQUI_TOS_AGREED=1
 # Inserisci la tua chiave API per l'agente di traduzione
 GROQ_API_KEY=la_tua_chiave_api_qui
 ```
-##🚀 Avvio dell'Ambiente di Sviluppo
+## 🚀 Avvio dell'Ambiente di Sviluppo
 
 Vovio è dotato di un setup DevX automatizzato. Gli script di avvio si occupano di creare ambienti virtuali isolati, scaricare la build corretta di PyTorch (CPU o GPU), sincronizzare pacchetti pip e npm in modo idempotente e lanciare i server in parallelo.
 
